@@ -19,3 +19,7 @@ apercu_portraits.png
 # ----------------------------------------------------------------------
 __pycache__/
 *.pyc
+
+# Restes de la migration du 11 octobre : anciens fichiers de la racine
+# et sorties de test. Rien ici ne sert au programme.
+_remplaces/
