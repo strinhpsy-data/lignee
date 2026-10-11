@@ -1,0 +1,21 @@
+# ----------------------------------------------------------------------
+# Ce qui se regenere ne se versionne pas, et ne se transmet jamais a Claude.
+# ----------------------------------------------------------------------
+arbre_*.html
+exemple_*.html
+*_fiches/
+panne_*.zip
+
+# ----------------------------------------------------------------------
+# Donnees personnelles : elles restent locales et voyagent par le sas.
+# Les tests tournent sur les jeux d'exemple de tests/donnees/.
+# ----------------------------------------------------------------------
+genealogie_jean.json
+photos/
+Scans/
+Scans OCR/
+apercu_portraits.png
+
+# ----------------------------------------------------------------------
+__pycache__/
+*.pyc

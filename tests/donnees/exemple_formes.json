@@ -1,0 +1,119 @@
+{
+  "meta": {
+    "titre": "Formes particulières",
+    "sous_titre": "Jeu d'épreuve — aucune personne réelle",
+    "carte": {
+      "actif": true,
+      "service": "https://www.google.com/maps/search/?api=1&query=",
+      "note": "Table minimale : on éprouve le mécanisme, pas la géographie.",
+      "lieux": {
+        "Bourg-sans-Nom": "Bourg-sans-Nom, Nulle-Part",
+        "Lieu Trop Vague": ""
+      },
+      "toponymes": {
+        "Bourg-sans-Nom": "Bourg-sans-Nom, Nulle-Part",
+        "Nulle-Part": ""
+      }
+    }
+  },
+
+  "problemes": [
+    {
+      "id": "p1",
+      "type": "divergence",
+      "gravite": "faible",
+      "personnes": ["b-deux-unions"],
+      "pages": "1",
+      "description": "Jeu d'épreuve : vérifie qu'un point à vérifier s'affiche bien sur la fiche de la personne visée."
+    }
+  ],
+
+  "personnes": {
+    "a-racine-h": {
+      "prenom": "Aaa", "nom": "Racine", "sexe": "M", "lignee": true, "pays": "fr",
+      "naissance": { "texte": "vers 1600", "certitude": "approximative", "tri": 1600 },
+      "deces": { "texte": "1660", "certitude": "attestee", "tri": 1660 },
+      "metiers": ["profession d'épreuve"],
+      "lieux": ["Bourg-sans-Nom", "Lieu Trop Vague"],
+      "marquants": ["Un fait marquant, pour éprouver l'affichage sur la carte flottante."],
+      "sources": ["Jeu d'épreuve"]
+    },
+    "a-racine-f": {
+      "prenom": "Aaa", "nom": "Souche", "sexe": "F", "lignee": true, "pays": "fr",
+      "naissance": { "texte": "date incertaine", "certitude": "inconnue" },
+      "sources": ["Jeu d'épreuve"]
+    },
+
+    "b-deux-unions": {
+      "prenom": "Bbb", "nom": "Deux-Unions", "sexe": "M", "lignee": true, "pays": "nf",
+      "ancetre": true,
+      "bapteme": { "texte": "1630, Bourg-sans-Nom", "certitude": "divergente", "tri": 1630 },
+      "lieux": ["Bourg-sans-Nom"],
+      "sections": [
+        {
+          "titre": "Chronologie d'épreuve",
+          "type": "chrono",
+          "contenu": [
+            { "date": "1630", "titre": "Naissance" },
+            { "date": "1655", "titre": "Première union", "detail": "Avec détail." }
+          ]
+        },
+        {
+          "titre": "Section confidentielle d'épreuve",
+          "prive": true,
+          "type": "texte",
+          "contenu": ["CONTENU-CONFIDENTIEL-TEMOIN : cette phrase ne doit jamais apparaître dans la version partageable."]
+        }
+      ],
+      "sources": ["Jeu d'épreuve"]
+    },
+    "b-conjointe-1": {
+      "prenom": "Bbb", "nom": "Première", "sexe": "F", "pays": "nf",
+      "sources": ["Jeu d'épreuve"]
+    },
+    "b-conjointe-2": {
+      "prenom": "Bbb", "nom": "Seconde", "sexe": "F", "pays": "nf",
+      "sources": ["Jeu d'épreuve"]
+    },
+
+    "c-sans-parents": {
+      "prenom": "Ccc", "nom": "Sans-Parents", "sexe": "F", "pays": "fr",
+      "notes": ["Personne qui entre dans l'arbre par alliance : aucun parent connu."],
+      "sources": ["Jeu d'épreuve"]
+    },
+    "c-enfant-union-1": {
+      "prenom": "Ccc", "nom": "Aîné", "sexe": "M", "pays": "nf",
+      "sources": ["Jeu d'épreuve"]
+    },
+    "c-enfant-union-2": {
+      "prenom": "Ccc", "nom": "Cadette", "sexe": "F", "pays": "nf",
+      "deces": { "texte": "en bas âge", "certitude": "inconnue" },
+      "sources": ["Jeu d'épreuve"]
+    },
+
+    "d-detache": {
+      "prenom": "Ddd", "nom": "Détaché", "sexe": "M", "lignee": true, "pays": "nf",
+      "lacune": "p1",
+      "notes": ["Nœud dont le rattachement n'est pas documenté : il doit s'afficher à part, relié par un trait pointillé."],
+      "sources": ["Jeu d'épreuve"]
+    }
+  },
+
+  "unions": [
+    { "id": "u-racine", "conjoints": ["a-racine-h", "a-racine-f"], "lignee": true,
+      "mariage": { "texte": "vers 1628", "certitude": "approximative" },
+      "enfants": ["b-deux-unions", "c-sans-parents"] },
+
+    { "id": "u-b1", "conjoints": ["b-deux-unions", "b-conjointe-1"], "lignee": true,
+      "mariage": { "texte": "1655", "certitude": "attestee" },
+      "enfants": ["c-enfant-union-1"] },
+
+    { "id": "u-b2", "conjoints": ["b-deux-unions", "b-conjointe-2"],
+      "mariage": { "texte": "1668", "certitude": "attestee" },
+      "contrat": { "texte": "contrat d'épreuve" },
+      "enfants": ["c-enfant-union-2"] }
+  ],
+
+  "racines": ["u-racine"],
+  "detaches": ["d-detache"]
+}

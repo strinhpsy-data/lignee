@@ -1,0 +1,1600 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Génère l'arbre généalogique interactif (HTML autonome) à partir du fichier JSON.
+
+Usage :
+    python generer_arbre.py                      -> lit genealogie_jean.json
+    python generer_arbre.py mon_fichier.json     -> lit le fichier indiqué
+    (ou glisser-déposer le .json sur Generer_Arbre.bat)
+
+PHOTOS
+    Déposez les images dans le sous-dossier « photos », nommées d'après
+    l'identifiant de la personne : photos/pierre-jean-1645.jpg
+    Elles sont redimensionnées et intégrées dans le HTML, qui reste
+    un fichier unique, autonome et transportable.
+    Sans photo, la personne reçoit un médaillon à initiales.
+
+Le HTML produit ne requiert aucune connexion ni bibliothèque externe.
+"""
+
+import base64
+import io
+import json
+import mimetypes
+import sys
+from pathlib import Path
+
+EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff")
+COTE_MAX = 420          # pixels : taille maximale du portrait intégré
+QUALITE = 82
+
+GABARIT = r"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITRE__</title>
+<style>
+:root{
+  --bg:#f8f5ec; --surface:#fffdf7; --surface-2:#f0e9d9; --surface-3:#e7dec8;
+  --ink:#241f17; --muted:#6b6150; --faint:#9b9079;
+  --line:#cfc3a9; --line-soft:#e4dbc7;
+  --or:#b4862c; --or-clair:#e0b65c; --or-bg:#f8edd4;
+  --fr:#b08a3e; --fr-bg:#f6ecd6;
+  --nf:#2f7d4f; --nf-bg:#dff0e4;
+  --alerte:#a8452a; --alerte-bg:#f9e4dd;
+  --ombre:0 1px 2px rgba(60,45,25,.10), 0 6px 18px rgba(60,45,25,.07);
+  --r:9px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#15130e; --surface:#201d16; --surface-2:#2b2719; --surface-3:#36301f;
+    --ink:#f3eee3; --muted:#a89c85; --faint:#79705d;
+    --line:#474032; --line-soft:#332e24;
+    --or:#dcae58; --or-clair:#f0cd8a; --or-bg:#34280f;
+    --fr:#d2a85e; --fr-bg:#2e2412;
+    --nf:#62c48f; --nf-bg:#152c1f;
+    --alerte:#e08a6c; --alerte-bg:#36201a;
+    --ombre:0 1px 2px rgba(0,0,0,.5), 0 6px 20px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15130e; --surface:#201d16; --surface-2:#2b2719; --surface-3:#36301f;
+  --ink:#f3eee3; --muted:#a89c85; --faint:#79705d;
+  --line:#474032; --line-soft:#332e24;
+  --or:#dcae58; --or-clair:#f0cd8a; --or-bg:#34280f;
+  --fr:#d2a85e; --fr-bg:#2e2412;
+  --nf:#62c48f; --nf-bg:#152c1f;
+  --alerte:#e08a6c; --alerte-bg:#36201a;
+  --ombre:0 1px 2px rgba(0,0,0,.5), 0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  overflow:hidden; -webkit-font-smoothing:antialiased;
+}
+button,input{font:inherit;color:inherit}
+
+/* ---------- barre du haut ---------- */
+header{
+  position:fixed; inset:0 0 auto 0; z-index:40; height:60px;
+  display:flex; align-items:center; gap:14px; padding:0 16px;
+  background:color-mix(in srgb, var(--surface) 93%, transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--line-soft);
+}
+.plaque{
+  background:var(--surface-2); border:1px solid var(--line-soft);
+  padding:6px 16px 7px; border-radius:3px; min-width:0;
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--surface) 70%, transparent);
+}
+.plaque b{display:block; font-size:16px; font-weight:600; letter-spacing:.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.plaque span{display:block; font-size:11px; color:var(--muted); letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.espace{flex:1}
+.outils{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.btn{
+  border:1px solid var(--line); background:var(--surface); border-radius:var(--r);
+  padding:7px 11px; font-size:12.5px; cursor:pointer; white-space:nowrap;
+  transition:background .14s, border-color .14s, color .14s;
+}
+.btn:hover{background:var(--surface-2)}
+.btn[aria-pressed="true"]{background:var(--or-bg); border-color:var(--or); color:var(--or); font-weight:600}
+.btn.rond{padding:7px 10px; font-variant-numeric:tabular-nums}
+.bascule{display:flex; border:1px solid var(--line); border-radius:var(--r); overflow:hidden}
+.bascule button{border:0; background:var(--surface); padding:7px 12px; font-size:12.5px; cursor:pointer}
+.bascule button+button{border-left:1px solid var(--line)}
+.bascule button[aria-pressed="true"]{background:var(--or-bg); color:var(--or); font-weight:600}
+.recherche{position:relative}
+.recherche input{
+  width:188px; padding:7px 26px 7px 11px; border-radius:var(--r);
+  border:1px solid var(--line); background:var(--surface); font-size:12.5px;
+}
+.recherche input:focus{outline:2px solid var(--or); outline-offset:-1px}
+.recherche .effacer{
+  position:absolute; right:4px; top:50%; transform:translateY(-50%);
+  border:0; background:transparent; cursor:pointer; color:var(--faint);
+  font-size:15px; line-height:1; padding:4px 5px; display:none;
+}
+.recherche.pleine .effacer{display:block}
+.compteur{font-size:11.5px;color:var(--muted);min-width:54px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---------- toile ---------- */
+#toile{position:fixed; inset:60px 0 0 0; cursor:grab; touch-action:none}
+#toile.glisse{cursor:grabbing}
+#toile svg{display:block;width:100%;height:100%}
+
+.lien{fill:none; stroke:var(--line); stroke-width:1.5}
+.lien.directe{stroke:var(--or); stroke-width:2.6}
+.alliance{fill:none; stroke:var(--line); stroke-width:1.5}
+.alliance.directe{stroke:var(--or); stroke-width:2.6}
+.etiq-mariage{font-size:9.8px; fill:var(--faint); font-variant-numeric:tabular-nums}
+.ruban{font-size:11.5px; fill:var(--faint); font-style:italic; letter-spacing:.3px}
+
+/* ---------- médaillons ---------- */
+.puce{cursor:pointer}
+.anneau{fill:none; stroke-width:3.2; transition:stroke-width .14s}
+.puce.fr .anneau{stroke:var(--fr)}
+.puce.nf .anneau{stroke:var(--nf)}
+.puce.directe .anneau{stroke:var(--or); stroke-width:4.6}
+.halo{fill:none; stroke:var(--or-clair); stroke-width:1.4; opacity:.55}
+.disque{fill:var(--surface-2)}
+.monogramme{font-size:21px; font-weight:600; fill:var(--faint); letter-spacing:.5px}
+.puce:hover .anneau{stroke:var(--or); stroke-width:5}
+.puce text.nom{font-size:11.4px; font-weight:600; fill:var(--ink)}
+.puce.directe text.nom{fill:var(--or)}
+.puce text.vie{font-size:9.8px; fill:var(--muted); font-variant-numeric:tabular-nums}
+.puce.selectionne .anneau{stroke:var(--alerte); stroke-width:5}
+.puce.eteint{opacity:.17}
+.puce.trouve .anneau{stroke:var(--alerte); stroke-width:5}
+.puce.detache .anneau{stroke-dasharray:6 5}
+
+/* ---------- fiches (second mode) ---------- */
+.puce rect.cadre{
+  fill:var(--surface); stroke:var(--line); stroke-width:1.2; rx:8;
+  transition:stroke .14s, stroke-width .14s;
+}
+.puce:hover rect.cadre{stroke:var(--or); stroke-width:2}
+.puce.directe rect.cadre{stroke:var(--or); stroke-width:2; fill:var(--or-bg)}
+.puce.ancetre rect.cadre{stroke-width:3}
+.puce.detache rect.cadre{stroke-dasharray:5 4}
+.puce.selectionne rect.cadre{stroke:var(--alerte); stroke-width:3}
+.puce.trouve rect.cadre{stroke:var(--alerte); stroke-width:2.6}
+.puce rect.bande{rx:2}
+.puce.fr rect.bande{fill:var(--fr)}
+.puce.nf rect.bande{fill:var(--nf)}
+.puce text.nomf{font-size:12.6px; font-weight:600; fill:var(--ink)}
+.puce text.vief{font-size:10.8px; fill:var(--muted); font-variant-numeric:tabular-nums}
+.puce text.rang{font-size:10px; fill:var(--faint); font-style:italic}
+.pastille{font-size:10px; font-weight:700; fill:#fff}
+.pastille-fond{fill:var(--alerte)}
+
+/* ---------- la fiche : carte flottante au clic sur un médaillon ---------- */
+#fiche{
+  position:fixed; z-index:50; width:322px; max-width:calc(100vw - 24px);
+  background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  box-shadow:0 2px 6px rgba(60,45,25,.12), 0 18px 46px rgba(60,45,25,.20);
+  opacity:0; visibility:hidden; transform:translateY(5px) scale(.985);
+  transition:opacity .13s ease, transform .13s ease, visibility .13s; overflow:hidden;
+}
+#fiche.ouverte{opacity:1; visibility:visible; transform:none}
+.f-haut{display:grid; grid-template-columns:auto 1fr auto; gap:0 12px; align-items:center;
+  padding:13px 13px 12px 15px; border-bottom:1px solid var(--line-soft); background:var(--surface-2)}
+.f-portrait{width:54px; height:54px; border-radius:50%; object-fit:cover;
+  border:2.5px solid var(--or); background:var(--surface)}
+.f-mono{width:54px; height:54px; border-radius:50%; background:var(--surface);
+  border:2.5px solid var(--line); display:grid; place-items:center;
+  font-size:17px; font-weight:600; color:var(--faint)}
+.f-ident{min-width:0}
+.f-ident h3{margin:0; font-size:16px; font-weight:600; line-height:1.2}
+.f-dates{font-size:11.8px; color:var(--muted); font-variant-numeric:tabular-nums; margin-top:2px}
+.f-surnom{font-size:11.4px; color:var(--faint); font-style:italic; margin-top:1px}
+.f-fermer{border:0; background:transparent; cursor:pointer; color:var(--faint);
+  font-size:17px; line-height:1; padding:3px 4px; align-self:start}
+.f-fermer:hover{color:var(--ink)}
+
+.f-corps{padding:12px 15px 6px; max-height:min(54vh, 470px); overflow-y:auto}
+.jeton{display:inline-block; font-size:10px; padding:2px 7px; border-radius:99px; margin:0 4px 7px 0; font-weight:600; letter-spacing:.2px}
+.j-fr{background:var(--fr-bg); color:var(--fr)}
+.j-nf{background:var(--nf-bg); color:var(--nf)}
+.j-or{background:var(--or-bg); color:var(--or)}
+.j-al{background:var(--alerte-bg); color:var(--alerte)}
+
+.f-faits{display:grid; grid-template-columns:62px 1fr; gap:6px 10px; font-size:12.7px; line-height:1.42; margin:2px 0 0}
+.f-faits dt{color:var(--faint); font-size:9.6px; text-transform:uppercase; letter-spacing:.6px;
+  font-weight:700; padding-top:2.5px}
+.f-faits dd{margin:0}
+.f-marquants{margin:11px 0 2px; padding:0; list-style:none; border-top:1px solid var(--line-soft); padding-top:10px}
+.f-marquants li{position:relative; padding-left:15px; font-size:12.7px; line-height:1.46; margin-bottom:8px}
+.f-marquants li::before{content:""; position:absolute; left:0; top:6px; width:6px; height:6px;
+  border-radius:50%; background:var(--or)}
+.f-note{font-size:11.9px; color:var(--ink); background:var(--alerte-bg);
+  border-left:3px solid var(--alerte); border-radius:0 6px 6px 0;
+  padding:8px 11px; margin:10px 0 0; line-height:1.45}
+.f-note b{display:block; color:var(--alerte); font-size:9.6px; text-transform:uppercase;
+  letter-spacing:.7px; margin-bottom:3px}
+.f-corps > .f-note:first-of-type{margin-top:12px; padding-top:8px}
+.f-bas{padding:10px 15px 12px; border-top:1px solid var(--line-soft);
+  display:flex; align-items:center; gap:10px; background:var(--surface)}
+.f-plus{font-size:12.7px; font-weight:600; color:var(--or); text-decoration:none;
+  display:inline-flex; align-items:center; gap:5px}
+.f-plus:hover{text-decoration:underline; text-underline-offset:2px}
+.f-plus::after{content:"→"}
+.f-compte{margin-left:auto; font-size:10.6px; color:var(--faint)}
+.lien-pers{color:var(--or); cursor:pointer; text-decoration:underline; text-underline-offset:2px}
+.lieu{color:var(--or); text-decoration:underline dotted;
+  text-decoration-color:color-mix(in srgb, var(--or) 50%, transparent);
+  text-underline-offset:2.5px}
+.lieu::after{content:""; display:inline-block; width:.66em; height:.66em; margin-left:.2em;
+  vertical-align:-.02em; background-color:currentColor; opacity:.75;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%202a7%207%200%200%200-7%207c0%205.3%207%2013%207%2013s7-7.7%207-13a7%207%200%200%200-7-7zm0%209.6A2.6%202.6%200%201%201%2012%206.4a2.6%202.6%200%200%201%200%205.2z%22%2F%3E%3C%2Fsvg%3E") center/contain no-repeat; mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%202a7%207%200%200%200-7%207c0%205.3%207%2013%207%2013s7-7.7%207-13a7%207%200%200%200-7-7zm0%209.6A2.6%202.6%200%201%201%2012%206.4a2.6%202.6%200%200%201%200%205.2z%22%2F%3E%3C%2Fsvg%3E") center/contain no-repeat}
+.lieu:hover{text-decoration-style:solid; text-decoration-color:var(--or)}
+.lieu:hover::after{opacity:1}
+.marque-cert{font-size:9.6px; font-weight:700; padding:1px 5px; border-radius:4px; margin-left:5px; letter-spacing:.2px}
+.c-approximative{background:var(--surface-2); color:var(--muted)}
+.c-deduite{background:var(--fr-bg); color:var(--fr)}
+.c-divergente,.c-incoherente,.c-inconnue{background:var(--alerte-bg); color:var(--alerte)}
+
+/* ---------- panneau des problèmes ---------- */
+#problemes{
+  position:fixed; top:60px; left:0; bottom:0; width:430px; max-width:92vw; z-index:46;
+  background:var(--surface); border-right:1px solid var(--line-soft); box-shadow:var(--ombre);
+  overflow-y:auto; padding:20px 22px 44px; transform:translateX(-100%);
+  transition:transform .2s ease; visibility:hidden;
+}
+#problemes.ouvert{transform:none; visibility:visible}
+#problemes h2{margin:0 0 4px; font-size:19px; font-weight:600}
+#problemes > p{margin:0 0 16px; font-size:12.8px; color:var(--muted); line-height:1.5}
+.pb{border:1px solid var(--line-soft); border-radius:8px; padding:12px 14px; margin-bottom:11px; background:var(--bg)}
+.pb-tete{display:flex; align-items:baseline; gap:8px; margin-bottom:6px; flex-wrap:wrap}
+.pb-type{font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; padding:2px 7px; border-radius:4px}
+.g-forte{background:var(--alerte-bg); color:var(--alerte)}
+.g-moyenne{background:var(--or-bg); color:var(--or)}
+.g-faible{background:var(--surface-2); color:var(--muted)}
+.pb-pages{font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums}
+.pb p{margin:0; font-size:13px; line-height:1.52}
+
+/* ---------- légende ---------- */
+.legende{
+  position:fixed; left:14px; bottom:14px; z-index:30;
+  background:color-mix(in srgb, var(--surface) 93%, transparent); backdrop-filter:blur(8px);
+  border:1px solid var(--line-soft); border-radius:var(--r); padding:9px 13px;
+  font-size:11.3px; color:var(--muted); line-height:1.75; box-shadow:var(--ombre); max-width:238px;
+}
+.legende summary{
+  list-style:none; cursor:pointer; color:var(--ink); font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.8px; font-weight:700; user-select:none;
+}
+.legende summary::-webkit-details-marker{display:none}
+.legende summary::after{content:" +"; color:var(--faint)}
+.legende[open] summary::after{content:" –"}
+.legende[open] summary{margin-bottom:6px}
+.legende i{display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:7px; vertical-align:-1px; border:2.5px solid}
+.legende .tr{display:inline-block; width:12px; height:0; border-top:2.5px solid var(--or); margin-right:7px; vertical-align:4px}
+.legende .tir{display:inline-block; width:12px; height:0; border-top:1.5px dashed var(--line); margin-right:7px; vertical-align:4px}
+.aide{position:fixed; right:14px; bottom:14px; z-index:30; font-size:11.3px; color:var(--faint);
+  background:color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter:blur(8px);
+  border:1px solid var(--line-soft); border-radius:var(--r); padding:8px 12px;}
+
+@media (max-width:980px){
+  .plaque span{display:none}
+  .recherche input{width:118px}
+  .legende{display:none}
+  .aide{display:none}
+  .compteur{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="plaque"><b>__TITRE__</b><span>__SOUS_TITRE__</span></div>
+  <div class="espace"></div>
+  <div class="outils">
+    <div class="bascule">
+      <button id="m-portraits" aria-pressed="true">Portraits</button>
+      <button id="m-fiches" aria-pressed="false">Cartes</button>
+    </div>
+    <div class="recherche" id="boite-rech">
+      <input id="rech" type="search" placeholder="Chercher un nom…" autocomplete="off" spellcheck="false">
+      <button class="effacer" id="effacer" title="Effacer">&times;</button>
+    </div>
+    <span class="compteur" id="compteur"></span>
+    <button class="btn" id="b-lignee" aria-pressed="false" title="Mettre en évidence la lignée directe">Lignée directe</button>
+    <button class="btn" id="b-pb" aria-pressed="false" title="Divergences et lacunes du document source">Problèmes <span id="n-pb"></span></button>
+    <button class="btn rond" id="b-moins" title="Dézoomer">&minus;</button>
+    <button class="btn rond" id="b-plus" title="Zoomer">+</button>
+    <button class="btn" id="b-reset" title="Tout revoir">Recadrer</button>
+    <button class="btn rond" id="b-theme" title="Clair / sombre">◐</button>
+  </div>
+</header>
+
+<div id="toile"><svg id="svg"><defs id="defs"></defs><g id="monde"></g></svg></div>
+
+<div id="fiche"></div>
+
+<div id="problemes">
+  <h2>Ce que le document ne tranche pas</h2>
+  <p>Divergences internes, dates invraisemblables et chaînons manquants relevés dans la source. Rien n'a été corrigé d'office : à vous de trancher sur pièces.</p>
+  <div id="liste-pb"></div>
+</div>
+
+<details class="legende">
+  <summary>Légende</summary>
+  <div><i style="border-color:var(--fr)"></i>Resté en France</div>
+  <div><i style="border-color:var(--nf)"></i>Passé en Nouvelle-France</div>
+  <div><i style="border-color:var(--or)"></i>Lignée directe</div>
+  <div><span class="tir"></span>Rattachement non documenté</div>
+  <div><i style="border-color:var(--alerte)"></i>Donnée contestée</div>
+</details>
+<div class="aide">Glisser pour déplacer · molette pour zoomer · cliquer un portrait</div>
+
+<script>
+"use strict";
+const D = __DONNEES__;
+
+/* ======================= graphe ======================= */
+const P = D.personnes, U = D.unions;
+const unionsDe = {}, unionParente = {};
+U.forEach(u=>{
+  u.conjoints.forEach(c=>{ (unionsDe[c] = unionsDe[c] || []).push(u); });
+  (u.enfants||[]).forEach(e=>{ unionParente[e] = u; });
+});
+
+function construire(idPivot, vu){
+  vu = vu || new Set();
+  if(vu.has(idPivot)) return null;
+  vu.add(idPivot);
+  const conjoints = [], groupes = [];
+  (unionsDe[idPivot]||[]).forEach(u=>{
+    const autre = u.conjoints.find(c=>c!==idPivot);
+    if(autre){ if(!vu.has(autre)) vu.add(autre); conjoints.push({id:autre, union:u}); }
+    groupes.push({union:u, enfants:(u.enfants||[]).map(e=>construire(e,vu)).filter(Boolean)});
+  });
+  return { id:idPivot, conjoints, groupes,
+           enfants: groupes.reduce((a,g)=>a.concat(g.enfants),[]) };
+}
+const racines = [];
+(D.racines||[]).forEach(rid=>{ const u = U.find(x=>x.id===rid); if(u) racines.push(construire(u.conjoints[0])); });
+(D.detaches||[]).forEach(pid=>{ racines.push(construire(pid)); });
+const principal = racines[0];
+const detaches = racines.slice(1);
+const ancNode = (function t(n){ if(P[n.id]&&P[n.id].ancetre) return n;
+  for(const e of (n.enfants||[])){ const r=t(e); if(r) return r; } return null; })(principal);
+
+/* ======================= dimensions ======================= */
+/* portraits : de haut en bas, médaillons ronds */
+const RAYON=34, MED_L=118, MED_H=118, MED_EP=18, MED_EF=22, MED_NIV=168;
+/* fiches : de gauche à droite, cartes */
+const FIC_L=184, FIC_H=62, FIC_EP=8, FIC_EF=16, FIC_COL=282;
+
+let mode = "portraits";
+
+/* ======================= mise en page ======================= */
+function taillePuces(n, pas, ecart){ const k=1+n.conjoints.length; return k*pas + (k-1)*ecart; }
+
+/* -- portraits : l'axe principal est horizontal, les générations descendent -- */
+function mesurerV(n){
+  const lp = taillePuces(n, MED_L, MED_EP);
+  if(!n.enfants.length){ n.taille = lp; n.tailleEnfants = 0; return n.taille; }
+  let s = 0; n.enfants.forEach((e,i)=>{ s += mesurerV(e); if(i) s += MED_EF; });
+  n.tailleEnfants = s; n.taille = Math.max(lp, s); return n.taille;
+}
+function placerV(n, gauche, y){
+  n.y = y;
+  const lp = taillePuces(n, MED_L, MED_EP);
+  if(!n.enfants.length){ n.debut = gauche + (n.taille-lp)/2; }
+  else{
+    let cx = gauche + (n.taille - n.tailleEnfants)/2;
+    n.enfants.forEach((e,i)=>{ if(i) cx += MED_EF; placerV(e, cx, y+MED_NIV); cx += e.taille; });
+    const a=n.enfants[0], b=n.enfants[n.enfants.length-1];
+    const c=(a.pivot+b.pivot)/2;
+    n.debut = Math.min(Math.max(c-lp/2, gauche), gauche+n.taille-lp);
+  }
+  n.puces = [{id:n.id, x:n.debut, y:y}];
+  n.conjoints.forEach((c,i)=>n.puces.push({id:c.id, x:n.debut+(i+1)*(MED_L+MED_EP), y:y, union:c.union}));
+  n.pivot = n.debut + MED_L/2;
+  n.centre = n.debut + lp/2;
+}
+
+/* -- fiches : l'axe principal est vertical, les générations vont vers la droite -- */
+function mesurerH(n){
+  const hp = taillePuces(n, FIC_H, FIC_EP);
+  if(!n.enfants.length){ n.taille = hp; n.tailleEnfants = 0; return n.taille; }
+  let s = 0; n.enfants.forEach((e,i)=>{ s += mesurerH(e); if(i) s += FIC_EF; });
+  n.tailleEnfants = s; n.taille = Math.max(hp, s); return n.taille;
+}
+function placerH(n, haut, x){
+  n.x = x;
+  const hp = taillePuces(n, FIC_H, FIC_EP);
+  if(!n.enfants.length){ n.debut = haut + (n.taille-hp)/2; }
+  else{
+    let cy = haut + (n.taille - n.tailleEnfants)/2;
+    n.enfants.forEach((e,i)=>{ if(i) cy += FIC_EF; placerH(e, cy, x+FIC_COL); cy += e.taille; });
+    const a=n.enfants[0], b=n.enfants[n.enfants.length-1];
+    const c=(a.pivot+b.pivot)/2;
+    n.debut = Math.min(Math.max(c-hp/2, haut), haut+n.taille-hp);
+  }
+  n.puces = [{id:n.id, x:x, y:n.debut}];
+  n.conjoints.forEach((c,i)=>n.puces.push({id:c.id, x:x, y:n.debut+(i+1)*(FIC_H+FIC_EP), union:c.union}));
+  n.pivot = n.debut + FIC_H/2;
+  n.centre = n.debut + hp/2;
+}
+
+function disposer(){
+  if(mode==="portraits"){
+    mesurerV(principal); placerV(principal, 0, 0);
+    detaches.forEach(d=>{ mesurerV(d);
+      if(ancNode) placerV(d, ancNode.pivot - d.taille/2, ancNode.y + Math.round(MED_NIV*1.55));
+      else placerV(d, 0, principal.taille + 120); });
+  }else{
+    mesurerH(principal); placerH(principal, 0, 0);
+    detaches.forEach(d=>{ mesurerH(d);
+      if(ancNode) placerH(d, ancNode.pivot - d.taille/2, ancNode.x + Math.round(FIC_COL*1.75));
+      else placerH(d, 0, 0); });
+  }
+}
+
+/* ======================= rendu ======================= */
+const NS="http://www.w3.org/2000/svg";
+const monde=document.getElementById("monde"), defs=document.getElementById("defs");
+function el(t,a){ const e=document.createElementNS(NS,t); for(const k in a) e.setAttribute(k,a[k]); return e; }
+
+function anneeDe(f){ if(!f) return null;
+  if(typeof f.tri==="number") return f.tri;
+  const m=(f.texte||"").match(/(1[5-9]\d{2})/); return m?+m[1]:null; }
+function vie(p){
+  const n=anneeDe(p.naissance)||anneeDe(p.bapteme), d=anneeDe(p.deces)||anneeDe(p.sepulture);
+  const ap=f=>f&&(f.certitude==="approximative"||f.certitude==="deduite");
+  const g=(ap(p.naissance)||ap(p.bapteme))?"~":"", h=(ap(p.deces)||ap(p.sepulture))?"~":"";
+  if(n&&d) return g+n+" – "+h+d;
+  if(n) return g+n+" –"; if(d) return "– "+h+d; return "";
+}
+function nomComplet(p){ return ((p.prenom||"")+" "+(p.nom||"")).trim(); }
+function initiales(p){
+  const a=(p.prenom||"?").trim()[0]||"?", b=(p.nom||"").trim()[0]||"";
+  return (a+b).toUpperCase();
+}
+function aProbleme(p){
+  if(p.lacune) return true;
+  return ["naissance","bapteme","deces","sepulture"].some(k=>{
+    const f=p[k]; return f && (f.certitude==="divergente"||f.certitude==="incoherente"); });
+}
+function couper(txt, maxCar, maxLignes){
+  const mots = txt.split(/[\s]+/); const lignes=[]; let cur="";
+  mots.forEach(m=>{
+    if(!cur) cur=m;
+    else if((cur+" "+m).length<=maxCar) cur+=" "+m;
+    else { lignes.push(cur); cur=m; }
+  });
+  if(cur) lignes.push(cur);
+  if(lignes.length>maxLignes){
+    const g=lignes.slice(0,maxLignes); g[maxLignes-1]=g[maxLignes-1].slice(0,maxCar-1)+"…"; return g;
+  }
+  return lignes;
+}
+
+let couchLiens, couchPuces, indexPuces={};
+
+function puceMedaillon(id,x,y,directe,detache){
+  const p=P[id]; if(!p) return;
+  const g=el("g",{class:"puce "+(p.pays||"fr")+(directe?" directe":"")+(detache?" detache":""),
+                  transform:`translate(${x},${y})`,"data-id":id});
+  const cx=MED_L/2, cy=RAYON+4;
+  if(p._photo){
+    const cid="cl-"+id;
+    if(!document.getElementById(cid)){
+      const cp=el("clipPath",{id:cid});
+      cp.appendChild(el("circle",{cx:0,cy:0,r:RAYON-1}));
+      defs.appendChild(cp);
+    }
+    const w=el("g",{transform:`translate(${cx},${cy})`});
+    w.appendChild(el("image",{href:p._photo, x:-(RAYON-1), y:-(RAYON-1),
+      width:(RAYON-1)*2, height:(RAYON-1)*2, preserveAspectRatio:"xMidYMid slice",
+      "clip-path":`url(#${cid})`}));
+    g.appendChild(w);
+  }else{
+    g.appendChild(el("circle",{class:"disque", cx, cy, r:RAYON-1}));
+    const t=el("text",{class:"monogramme", x:cx, y:cy+7.5, "text-anchor":"middle"});
+    t.textContent=initiales(p); g.appendChild(t);
+  }
+  if(directe) g.appendChild(el("circle",{class:"halo", cx, cy, r:RAYON+5}));
+  g.appendChild(el("circle",{class:"anneau", cx, cy, r:RAYON}));
+  if(aProbleme(p)){
+    g.appendChild(el("circle",{class:"pastille-fond", cx:cx+RAYON-7, cy:cy-RAYON+9, r:8}));
+    const b=el("text",{class:"pastille", x:cx+RAYON-7, y:cy-RAYON+12.5, "text-anchor":"middle"});
+    b.textContent="!"; g.appendChild(b);
+  }
+  let yy = cy+RAYON+15;
+  couper(nomComplet(p), 19, 2).forEach(l=>{
+    const t=el("text",{class:"nom", x:cx, y:yy, "text-anchor":"middle"}); t.textContent=l;
+    g.appendChild(t); yy+=13;
+  });
+  const v=vie(p);
+  if(v){ const t=el("text",{class:"vie", x:cx, y:yy-1, "text-anchor":"middle"}); t.textContent=v; g.appendChild(t); }
+  g.addEventListener("click",ev=>{ev.stopPropagation();
+    if(aBouge){ aBouge=false; return; }
+    ouvrirFiche(id);});
+  couchPuces.appendChild(g); indexPuces[id]=g;
+}
+
+function puceFiche(id,x,y,directe,detache){
+  const p=P[id]; if(!p) return;
+  const g=el("g",{class:"puce "+(p.pays||"fr")+(directe?" directe":"")+(p.ancetre?" ancetre":"")+(detache?" detache":""),
+                  transform:`translate(${x},${y})`,"data-id":id});
+  g.appendChild(el("rect",{class:"cadre",x:0,y:0,width:FIC_L,height:FIC_H}));
+  g.appendChild(el("rect",{class:"bande",x:0,y:9,width:3.5,height:FIC_H-18}));
+  let dx = 13;
+  if(p._photo){
+    const cid="clf-"+id;
+    if(!document.getElementById(cid)){
+      const cp=el("clipPath",{id:cid}); cp.appendChild(el("circle",{cx:0,cy:0,r:19}));
+      defs.appendChild(cp);
+    }
+    const w=el("g",{transform:`translate(${34},${FIC_H/2})`});
+    w.appendChild(el("image",{href:p._photo,x:-19,y:-19,width:38,height:38,
+      preserveAspectRatio:"xMidYMid slice","clip-path":`url(#${cid})`}));
+    w.appendChild(el("circle",{class:"anneau",cx:0,cy:0,r:19,"stroke-width":2}));
+    g.appendChild(w); dx = 62;
+  }
+  const t1=el("text",{class:"nomf",x:dx,y:23}); t1.textContent=nomComplet(p); g.appendChild(t1);
+  const v=vie(p);
+  if(v){ const t2=el("text",{class:"vief",x:dx,y:39}); t2.textContent=v; g.appendChild(t2); }
+  const bas=p.surnom||(p.metiers&&p.metiers[0])||(p.lieux&&p.lieux[0])||"";
+  if(bas){ const t3=el("text",{class:"rang",x:dx,y:v?53:40});
+    t3.textContent = bas.length>24?bas.slice(0,23)+"…":bas; g.appendChild(t3); }
+  if(aProbleme(p)){
+    g.appendChild(el("circle",{class:"pastille-fond",cx:FIC_L-14,cy:15,r:8}));
+    const b=el("text",{class:"pastille",x:FIC_L-14,y:18.5,"text-anchor":"middle"}); b.textContent="!";
+    g.appendChild(b);
+  }
+  g.addEventListener("click",ev=>{ev.stopPropagation();
+    if(aBouge){ aBouge=false; return; }
+    ouvrirFiche(id);});
+  couchPuces.appendChild(g); indexPuces[id]=g;
+}
+
+function dessinerV(n, detache){
+  n.puces.forEach((pu,i)=>{
+    puceMedaillon(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache);
+    if(i>0){
+      const u=pu.union||{}, d=!!u.lignee;
+      const ym=pu.y+RAYON+4;
+      const x1=n.puces[i-1].x+MED_L/2+RAYON, x2=pu.x+MED_L/2-RAYON;
+      couchLiens.appendChild(el("path",{class:"alliance"+(d?" directe":""), d:`M ${x1} ${ym} H ${x2}`}));
+      const lab=(u.mariage&&u.mariage.texte)?u.mariage.texte.match(/(1[5-9]\d{2})/):null;
+      if(lab){ const t=el("text",{class:"etiq-mariage",x:(x1+x2)/2,y:ym-7,"text-anchor":"middle"});
+        t.textContent=lab[1]; couchLiens.appendChild(t); }
+    }
+  });
+  n.groupes.forEach((gr,gi)=>{
+    if(!gr.enfants.length) return;
+    const idx=n.puces.findIndex(pu=>pu.union===gr.union);
+    const xa=n.pivot, xb=idx>0?n.puces[idx].x+MED_L/2:xa;
+    const xU=(xa+xb)/2, yDep=n.y+MED_H+4, yBus=n.y+MED_H+26+gi*10;
+    const d=!!gr.union.lignee, cls="lien"+(d?" directe":"");
+    couchLiens.appendChild(el("path",{class:cls,d:`M ${xU} ${yDep} V ${yBus}`}));
+    const xs=gr.enfants.map(e=>e.pivot);
+    couchLiens.appendChild(el("path",{class:cls,d:`M ${Math.min(xU,...xs)} ${yBus} H ${Math.max(xU,...xs)}`}));
+    gr.enfants.forEach(e=>{
+      const de=!!(P[e.id]&&P[e.id].lignee)&&d;
+      couchLiens.appendChild(el("path",{class:"lien"+(de?" directe":""),
+        d:`M ${e.pivot} ${yBus} V ${e.y+4}`}));
+      dessinerV(e, detache);
+    });
+  });
+}
+
+function dessinerH(n, detache){
+  n.puces.forEach((pu,i)=>{
+    puceFiche(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache);
+    if(i>0){
+      const u=pu.union||{}, d=!!u.lignee, xm=n.x+24;
+      const y1=n.puces[i-1].y+FIC_H, y2=pu.y;
+      couchLiens.appendChild(el("path",{class:"alliance"+(d?" directe":""),d:`M ${xm} ${y1} V ${y2}`}));
+      const lab=(u.mariage&&u.mariage.texte)?u.mariage.texte.match(/(1[5-9]\d{2})/):null;
+      if(lab){ const t=el("text",{class:"etiq-mariage",x:xm+7,y:(y1+y2)/2+3.5});
+        t.textContent=lab[1]; couchLiens.appendChild(t); }
+    }
+  });
+  n.groupes.forEach((gr,gi)=>{
+    if(!gr.enfants.length) return;
+    const idx=n.puces.findIndex(pu=>pu.union===gr.union);
+    const ya=n.debut+FIC_H/2, yb=idx>0?n.puces[idx].y+FIC_H/2:ya;
+    const yU=(ya+yb)/2, xDep=n.x+FIC_L, xBus=n.x+FIC_COL-54+gi*11;
+    const d=!!gr.union.lignee, cls="lien"+(d?" directe":"");
+    couchLiens.appendChild(el("path",{class:cls,d:`M ${xDep} ${yU} H ${xBus}`}));
+    const ys=gr.enfants.map(e=>e.pivot);
+    couchLiens.appendChild(el("path",{class:cls,d:`M ${xBus} ${Math.min(yU,...ys)} V ${Math.max(yU,...ys)}`}));
+    gr.enfants.forEach(e=>{
+      const de=!!(P[e.id]&&P[e.id].lignee)&&d;
+      couchLiens.appendChild(el("path",{class:"lien"+(de?" directe":""),d:`M ${xBus} ${e.pivot} H ${e.x}`}));
+      dessinerH(e, detache);
+    });
+  });
+}
+
+function rendre(garderVue){
+  const vx=tx, vy=ty, ve=ech;
+  monde.textContent=""; defs.textContent=""; indexPuces={};
+  couchLiens=el("g",{}); couchPuces=el("g",{});
+  monde.appendChild(couchLiens); monde.appendChild(couchPuces);
+  disposer();
+  if(mode==="portraits"){
+    dessinerV(principal,false); detaches.forEach(d=>dessinerV(d,true));
+    if(ancNode&&detaches.length){
+      const d0=detaches[0], x=ancNode.pivot;
+      couchLiens.insertBefore(el("path",{class:"lien","stroke-dasharray":"7 6",
+        stroke:"var(--or)","stroke-width":"2",
+        d:`M ${x} ${ancNode.y+MED_H+4} V ${d0.y}`}), couchLiens.firstChild);
+      const t=el("text",{class:"ruban",x:x+14,y:(ancNode.y+MED_H+d0.y)/2+4});
+      t.textContent="générations 4 et 5 — absentes de l'extrait"; couchLiens.appendChild(t);
+    }
+  }else{
+    dessinerH(principal,false); detaches.forEach(d=>dessinerH(d,true));
+    if(ancNode&&detaches.length){
+      const d0=detaches[0], y=ancNode.pivot;
+      couchLiens.insertBefore(el("path",{class:"lien","stroke-dasharray":"7 6",
+        stroke:"var(--or)","stroke-width":"2",
+        d:`M ${ancNode.x+FIC_L} ${y} H ${d0.x}`}), couchLiens.firstChild);
+      const t=el("text",{class:"ruban",x:(ancNode.x+FIC_L+d0.x)/2,y:y-12,"text-anchor":"middle"});
+      t.textContent="générations 4 et 5 — absentes de l'extrait"; couchLiens.appendChild(t);
+    }
+  }
+  if(garderVue){ tx=vx; ty=vy; ech=ve; appliquer(); } else vueInitiale();
+  chercher(); appliquerLignee();
+  if(selection && indexPuces[selection]){
+    indexPuces[selection].classList.add("selectionne");
+    if(boiteFiche.classList.contains("ouverte")) positionnerFiche(selection);
+  }
+}
+
+/* ======================= zoom & déplacement ======================= */
+const toile=document.getElementById("toile");
+let ech=1, tx=0, ty=0;
+function appliquer(){ monde.setAttribute("transform",`translate(${tx},${ty}) scale(${ech})`); }
+function recadrer(){
+  const b=monde.getBBox(), r=toile.getBoundingClientRect();
+  ech=Math.max(Math.min(Math.min((r.width-80)/b.width,(r.height-80)/b.height),1),.06);
+  tx=(r.width-b.width*ech)/2-b.x*ech; ty=(r.height-b.height*ech)/2-b.y*ech; appliquer();
+}
+function vueInitiale(){
+  const b=monde.getBBox(), r=toile.getBoundingClientRect();
+  const tient=Math.min((r.width-80)/b.width,(r.height-80)/b.height);
+  if(tient>=.8){ recadrer(); return; }
+  ech=.82;
+  const c=ancNode||principal;
+  const cx = (mode==="portraits") ? c.pivot : c.x+FIC_L/2;
+  const cy = (mode==="portraits") ? c.y+MED_H/2 : c.pivot;
+  tx = (b.width*ech  <= r.width-70)  ? (r.width -b.width *ech)/2 - b.x*ech : r.width*0.40 - cx*ech;
+  ty = (b.height*ech <= r.height-70) ? (r.height-b.height*ech)/2 - b.y*ech : r.height*0.46 - cy*ech;
+  appliquer();
+}
+/* Déplacement : surtout PAS de setPointerCapture sur la toile — la capture
+   détourne le clic vers la toile et les médaillons ne reçoivent plus rien.
+   On suit le pointeur sur window, et on ne considère qu'il y a glissement
+   qu'au-delà d'un petit seuil, pour qu'un clic reste un clic. */
+let pret=false, glisse=false, aBouge=false, dx=0, dy=0, x0=0, y0=0;
+const SEUIL=4;
+toile.addEventListener("pointerdown",e=>{
+  if(e.pointerType==="mouse" && e.button!==0) return;
+  pret=true; glisse=false; aBouge=false;
+  x0=e.clientX; y0=e.clientY; dx=e.clientX-tx; dy=e.clientY-ty;
+});
+window.addEventListener("pointermove",e=>{
+  if(!pret) return;
+  if(!glisse){
+    if(Math.abs(e.clientX-x0)<SEUIL && Math.abs(e.clientY-y0)<SEUIL) return;
+    glisse=true; aBouge=true; toile.classList.add("glisse");
+    if(boiteFiche.classList.contains("ouverte")) fermerFiche();
+  }
+  tx=e.clientX-dx; ty=e.clientY-dy; appliquer();
+});
+function finGlisse(){ pret=false; glisse=false; toile.classList.remove("glisse"); }
+window.addEventListener("pointerup", finGlisse);
+window.addEventListener("pointercancel", finGlisse);
+toile.addEventListener("wheel",e=>{
+  e.preventDefault();
+  const r=toile.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  const ne=Math.min(Math.max(ech*Math.exp(-e.deltaY*0.0014),.06),3.2);
+  tx=mx-(mx-tx)*(ne/ech); ty=my-(my-ty)*(ne/ech); ech=ne; appliquer();
+},{passive:false});
+function zoomer(f){
+  const r=toile.getBoundingClientRect(), mx=r.width/2, my=r.height/2;
+  const ne=Math.min(Math.max(ech*f,.06),3.2);
+  tx=mx-(mx-tx)*(ne/ech); ty=my-(my-ty)*(ne/ech); ech=ne; appliquer();
+}
+document.getElementById("b-plus").onclick=()=>zoomer(1.25);
+document.getElementById("b-moins").onclick=()=>zoomer(.8);
+document.getElementById("b-reset").onclick=recadrer;
+toile.addEventListener("click",()=>{ if(!aBouge) fermerFiche(); aBouge=false; });
+
+/* ======================= la fiche : carte flottante ======================= */
+const boiteFiche=document.getElementById("fiche");
+let selection=null;
+/* la carte ne se referme pas quand on clique dedans */
+boiteFiche.addEventListener("pointerdown",e=>e.stopPropagation());
+boiteFiche.addEventListener("click",e=>e.stopPropagation());
+function ech2(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+const LIB={approximative:"approx.",deduite:"déduit",divergente:"divergent",incoherente:"incohérent",inconnue:"inconnu"};
+function cert(x){ return x&&x.certitude&&x.certitude!=="attestee"
+  ? `<span class="marque-cert c-${x.certitude}">${LIB[x.certitude]||x.certitude}</span>` : ""; }
+
+/* -- contenu de la carte -- */
+function ouvrirFiche(id){
+  const p=P[id]; if(!p) return;
+  if(selection&&indexPuces[selection]) indexPuces[selection].classList.remove("selectionne");
+  selection=id;
+  if(indexPuces[id]) indexPuces[id].classList.add("selectionne");
+
+  let jet = p.pays==="nf"?`<span class="jeton j-nf">Nouvelle-France</span>`
+                         :`<span class="jeton j-fr">France</span>`;
+  if(p.ancetre) jet+=`<span class="jeton j-or">Ancêtre canadien</span>`;
+  else if(p.lignee) jet+=`<span class="jeton j-or">Lignée directe</span>`;
+  if(p.lacune) jet+=`<span class="jeton j-al">Rattachement non documenté</span>`;
+  if((p.sections||[]).some(s=>s.prive)) jet+=`<span class="jeton j-al">Confidentiel</span>`;
+
+  /* l'essentiel, en quelques lignes */
+  const L=[];
+  const f=(lib,x)=>{ if(x&&x.texte) L.push(`<dt>${lib}</dt><dd>${tl(x.texte)}${cert(x)}</dd>`); };
+  f("Naissance", p.naissance);
+  if(!p.naissance) f("Baptême", p.bapteme);
+  f("Décès", p.deces);
+  if(!p.deces) f("Sépulture", p.sepulture);
+  if(p.metiers&&p.metiers.length) L.push(`<dt>Métier</dt><dd>${ech2(p.metiers.join(" · "))}</dd>`);
+  if(p.lieux&&p.lieux.length){
+    const reste=p.lieux.length-1;
+    L.push(`<dt>Lieu</dt><dd>${lieuHTML(p.lieux[0])}`
+      +(reste?` <span class="f-compte">+${reste}</span>`:"")+`</dd>`);
+  }
+  (unionsDe[id]||[]).forEach(u=>{
+    const a=u.conjoints.find(c=>c!==id);
+    const an=((u.mariage&&u.mariage.texte)||"").match(/(1[5-9]\d{2})/);
+    L.push(`<dt>Union</dt><dd><span class="lien-pers" data-va="${ech2(a)}">`
+      +`${ech2(a?nomComplet(P[a]||{}):"—")}</span>`
+      +(an?` <span class="f-compte">${an[1]}</span>`:"")+`</dd>`);
+  });
+  const par=unionParente[id];
+  if(par) L.push(`<dt>Parents</dt><dd>`
+    +par.conjoints.map(c=>`<span class="lien-pers" data-va="${ech2(c)}">${ech2(nomComplet(P[c]||{}))}</span>`).join(" &amp; ")
+    +`</dd>`);
+  const enf=(unionsDe[id]||[]).reduce((a,u)=>a.concat(u.enfants||[]),[]);
+  if(enf.length) L.push(`<dt>Enfants</dt><dd>`
+    +enf.map(e=>`<span class="lien-pers" data-va="${ech2(e)}">${ech2((P[e]||{}).prenom||e)}</span>`).join(", ")
+    +`</dd>`);
+
+  const marq=p.marquants||[];
+  const pbs=(D.problemes||[]).filter(x=>(x.personnes||[]).includes(id));
+
+  /* ce qui attend derrière « En savoir plus » */
+  const sections=p.sections||[];
+  const nbEv=sections.reduce((a,s)=>a+(s.type==="chrono"&&Array.isArray(s.contenu)?s.contenu.length:0),0);
+  const compte=[];
+  if(sections.length) compte.push(sections.length+" section"+(sections.length>1?"s":""));
+  if(nbEv) compte.push(nbEv+" événements");
+  if(pbs.length) compte.push(pbs.length+" à vérifier");
+
+  const v=vie(p);
+  boiteFiche.innerHTML =
+    `<div class="f-haut">`
+    +(p._photo?`<img class="f-portrait" src="${p._photo}" alt="">`
+              :`<div class="f-mono">${ech2(initiales(p))}</div>`)
+    +`<div class="f-ident"><h3>${ech2(nomComplet(p))}</h3>`
+    +(v?`<div class="f-dates">${ech2(v)}</div>`:"")
+    +(p.surnom?`<div class="f-surnom">${ech2(p.surnom)}</div>`:"")
+    +`</div><button class="f-fermer" title="Fermer">&times;</button></div>`
+    +`<div class="f-corps"><div>${jet}</div>`
+    +(L.length?`<dl class="f-faits">${L.join("")}</dl>`:"")
+    +(marq.length?`<ul class="f-marquants">${marq.map(m=>`<li>${tl(m)}</li>`).join("")}</ul>`:"")
+    +pbs.map(x=>`<div class="f-note"><b>${ech2(x.type)} · p. ${ech2(x.pages||"?")}</b>${tl(x.description)}</div>`).join("")
+    +`</div>`
+    +`<div class="f-bas"><a class="f-plus" href="__DOSSIER_FICHES__/${encodeURIComponent(id)}.html" target="_blank" rel="noopener">En savoir plus</a>`
+    +(compte.length?`<span class="f-compte">${compte.join(" · ")}</span>`:"")
+    +`</div>`;
+
+  boiteFiche.querySelector(".f-fermer").onclick=e=>{ e.stopPropagation(); fermerFiche(); };
+  boiteFiche.querySelectorAll(".lien-pers").forEach(a=>a.addEventListener("click",e=>{
+    e.stopPropagation();
+    const w=a.getAttribute("data-va");
+    if(!P[w]) return;
+    if(indexPuces[w]){ centrer(w); setTimeout(()=>ouvrirFiche(w),170); } else ouvrirFiche(w);
+  }));
+  positionnerFiche(id);
+  boiteFiche.classList.add("ouverte");
+}
+
+function abreger(t,n){ t=String(t||""); return t.length>n ? t.slice(0,n-1)+"…" : t; }
+
+/* ---- lieux cliquables vers une carte ----
+   La requête ne part jamais du texte brut : il contient des dates entre
+   parenthèses, et « Champlain » tout seul tombe en France. On passe par la
+   table meta.carte.lieux, corrigeable à la main ; une entrée vide = pas de lien. */
+const CARTE = (D.meta && D.meta.carte) || {};
+function nettoyerLieu(t){
+  return String(t||"").replace(/\([^)]*\)/g," ").replace(/\s{2,}/g," ").trim().replace(/^[,;\s]+|[,;\s]+$/g,"");
+}
+function urlCarte(texte){
+  if(CARTE.actif===false) return null;
+  const table=CARTE.lieux||{};
+  let q = Object.prototype.hasOwnProperty.call(table,texte) ? table[texte] : nettoyerLieu(texte);
+  if(!q) return null;
+  return (CARTE.service||"https://www.google.com/maps/search/?api=1&query=") + encodeURIComponent(q);
+}
+function lieuHTML(texte){
+  const u=urlCarte(texte);
+  return u ? `<a class="lieu" href="${u}" target="_blank" rel="noopener" title="Voir sur la carte">${ech2(texte)}</a>`
+           : ech2(texte);
+}
+
+/* Reconnaissance des toponymes DANS les textes libres.
+   On travaille sur du texte déjà échappé ; une seule occurrence par bloc. */
+const TOPO=(CARTE.toponymes)||{};
+const TOPO_NOMS=Object.keys(TOPO).filter(k=>TOPO[k]).sort((a,b)=>b.length-a.length);
+function aplatir(s){ return s.replace(/’/g,"'").toLowerCase(); }
+function estLettre(c){ return !!c && /[0-9A-Za-zÀ-ÖØ-öø-ÿ'’]/.test(c); }
+function lierLieux(txt){
+  if(CARTE.actif===false || !TOPO_NOMS.length || !txt) return txt;
+  let res=String(txt), pris=[];
+  for(const nom of TOPO_NOMS){
+    const cible=aplatir(nom), n=cible.length;
+    let i=-1, depart=0;
+    for(;;){
+      i=aplatir(res).indexOf(cible, depart);
+      if(i<0) break;
+      const dansBalise = res.lastIndexOf("<",i) > res.lastIndexOf(">",i);
+      const chevauche = pris.some(p=> i<p[1] && i+n>p[0]);
+      if(!estLettre(res[i-1]) && !estLettre(res[i+n]) && !dansBalise && !chevauche) break;
+      depart=i+1;
+    }
+    if(i<0) continue;
+    const brut=res.slice(i,i+n);
+    const a=`<a class="lieu" href="${(CARTE.service||"")+encodeURIComponent(TOPO[nom])}"`
+          +` target="_blank" rel="noopener" title="Voir sur la carte">${brut}</a>`;
+    res=res.slice(0,i)+a+res.slice(i+n);
+    const d=a.length-n;
+    pris=pris.map(p=> p[0]>i ? [p[0]+d,p[1]+d] : p);
+    pris.push([i,i+a.length]);
+  }
+  return res;
+}
+/* texte échappé puis enrichi de ses liens de lieux */
+function tl(s){ return lierLieux(ech2(s)); }
+
+/* la carte se colle au médaillon, et bascule de côté si elle déborde */
+function positionnerFiche(id){
+  const g=indexPuces[id];
+  const l=boiteFiche.offsetWidth, h=boiteFiche.offsetHeight;
+  const vw=window.innerWidth, vh=window.innerHeight, M=12, HAUT=70;
+  let x,y;
+  if(g){
+    const b=g.getBoundingClientRect();
+    x=b.right+14;
+    if(x+l>vw-M) x=b.left-l-14;
+    if(x<M) x=Math.min(Math.max(b.left,M), vw-l-M);
+    y=b.top+b.height/2-h/2;
+  }else{ x=vw-l-M; y=HAUT+18; }
+  boiteFiche.style.left=Math.round(Math.max(M,Math.min(x,vw-l-M)))+"px";
+  boiteFiche.style.top =Math.round(Math.max(HAUT,Math.min(y,vh-h-M)))+"px";
+}
+
+function fermerFiche(){
+  boiteFiche.classList.remove("ouverte");
+  if(selection&&indexPuces[selection]) indexPuces[selection].classList.remove("selectionne");
+  selection=null;
+}
+
+function centrer(id){
+  const g=indexPuces[id]; if(!g) return;
+  const m=/translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform")); if(!m) return;
+  const r=toile.getBoundingClientRect();
+  const lx=mode==="portraits"?MED_L/2:FIC_L/2, ly=mode==="portraits"?MED_H/2:FIC_H/2;
+  tx=r.width*0.36-(+m[1]+lx)*ech; ty=r.height/2-(+m[2]+ly)*ech; appliquer();
+}
+
+/* ======================= recherche & filtres ======================= */
+const rech=document.getElementById("rech"), boite=document.getElementById("boite-rech"),
+      compteur=document.getElementById("compteur"), bLig=document.getElementById("b-lignee");
+function norm(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
+function chercher(){
+  const q=norm(rech.value.trim());
+  boite.classList.toggle("pleine",!!q);
+  if(!q){ Object.values(indexPuces).forEach(g=>g.classList.remove("eteint","trouve"));
+    compteur.textContent=""; appliquerLignee(); return; }
+  let n=0;
+  Object.entries(indexPuces).forEach(([id,g])=>{
+    const p=P[id];
+    const foin=norm([nomComplet(p),p.surnom,(p.variantes||[]).join(" "),
+      (p.metiers||[]).join(" "),(p.lieux||[]).join(" ")].join(" "));
+    const ok=foin.includes(q);
+    g.classList.toggle("trouve",ok); g.classList.toggle("eteint",!ok);
+    if(ok) n++;
+  });
+  compteur.textContent=n+(n>1?" trouvés":" trouvé");
+}
+function appliquerLignee(){
+  if(bLig.getAttribute("aria-pressed")!=="true") return;
+  Object.entries(indexPuces).forEach(([id,g])=>{ if(!(P[id]||{}).lignee) g.classList.add("eteint"); });
+}
+rech.addEventListener("input",chercher);
+document.getElementById("effacer").onclick=()=>{rech.value="";chercher();rech.focus();};
+bLig.onclick=()=>{
+  const on=bLig.getAttribute("aria-pressed")!=="true";
+  bLig.setAttribute("aria-pressed",on);
+  Object.values(indexPuces).forEach(g=>g.classList.remove("eteint"));
+  chercher(); appliquerLignee();
+};
+
+/* ======================= bascule de mode ======================= */
+const bP=document.getElementById("m-portraits"), bF=document.getElementById("m-fiches");
+function setMode(m){
+  if(m===mode) return;
+  mode=m;
+  bP.setAttribute("aria-pressed", m==="portraits");
+  bF.setAttribute("aria-pressed", m==="fiches");
+  rendre(false);
+}
+bP.onclick=()=>setMode("portraits");
+bF.onclick=()=>setMode("fiches");
+
+/* ======================= problèmes ======================= */
+const vPb=document.getElementById("problemes"), bPb=document.getElementById("b-pb");
+document.getElementById("n-pb").textContent=(D.problemes||[]).length?"("+D.problemes.length+")":"";
+document.getElementById("liste-pb").innerHTML=(D.problemes||[]).map(x=>{
+  const qui=(x.personnes||[]).map(i=>nomComplet(P[i]||{})).filter(s=>s.trim()).join(", ");
+  return `<div class="pb"><div class="pb-tete">
+    <span class="pb-type g-${ech2(x.gravite||"faible")}">${ech2(x.type)}</span>
+    <span class="pb-pages">p. ${ech2(x.pages||"?")}</span>
+    ${qui?`<span class="pb-pages">· ${ech2(qui)}</span>`:""}
+  </div><p>${ech2(x.description)}</p></div>`;
+}).join("");
+bPb.onclick=()=>{ const on=!vPb.classList.contains("ouvert");
+  vPb.classList.toggle("ouvert",on); bPb.setAttribute("aria-pressed",on); };
+
+/* ======================= thème ======================= */
+document.getElementById("b-theme").onclick=()=>{
+  const sombre=getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number)[0]<100;
+  document.documentElement.setAttribute("data-theme", sombre?"light":"dark");
+};
+
+/* ======================= clavier ======================= */
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){ fermerFiche(); vPb.classList.remove("ouvert"); bPb.setAttribute("aria-pressed",false);
+    if(rech.value){ rech.value=""; chercher(); } }
+  if(e.key==="/"&&document.activeElement!==rech){ e.preventDefault(); rech.focus(); }
+});
+
+rendre(false);
+</script>
+</body>
+</html>
+"""
+
+
+def charger_photo(chemin: Path):
+    """Lit une image, la réduit si possible, renvoie une URI data:."""
+    donnees = chemin.read_bytes()
+    try:
+        from PIL import Image
+        im = Image.open(io.BytesIO(donnees))
+        im = im.convert("RGB")
+        # recadrage carré centré, puis réduction
+        c = min(im.size)
+        g = (im.width - c) // 2
+        h = (im.height - c) // 2
+        im = im.crop((g, h, g + c, h + c))
+        if c > COTE_MAX:
+            im = im.resize((COTE_MAX, COTE_MAX), Image.LANCZOS)
+        tampon = io.BytesIO()
+        im.save(tampon, format="JPEG", quality=QUALITE, optimize=True)
+        return "data:image/jpeg;base64," + base64.b64encode(tampon.getvalue()).decode(), len(tampon.getvalue())
+    except Exception:
+        mt = mimetypes.guess_type(chemin.name)[0] or "image/jpeg"
+        return "data:" + mt + ";base64," + base64.b64encode(donnees).decode(), len(donnees)
+
+
+def trouver_photo(dossier: Path, pid: str, nom_declare=None):
+    if nom_declare:
+        p = dossier / nom_declare
+        if p.exists():
+            return p
+        p = dossier.parent / nom_declare
+        if p.exists():
+            return p
+        return None
+    for ext in EXTENSIONS:
+        p = dossier / (pid + ext)
+        if p.exists():
+            return p
+    return None
+
+
+GABARIT_PAGE = r"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__NOM__ — __TITRE_ARBRE__</title>
+<style>
+:root{
+  --bg:#f8f5ec; --surface:#fffdf7; --surface-2:#f0e9d9;
+  --ink:#241f17; --muted:#6b6150; --faint:#9b9079;
+  --line:#cfc3a9; --line-soft:#e4dbc7;
+  --or:#b4862c; --or-bg:#f8edd4;
+  --fr:#b08a3e; --fr-bg:#f6ecd6;
+  --nf:#2f7d4f; --nf-bg:#dff0e4;
+  --alerte:#a8452a; --alerte-bg:#f9e4dd;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#15130e; --surface:#201d16; --surface-2:#2b2719;
+  --ink:#f3eee3; --muted:#a89c85; --faint:#79705d;
+  --line:#474032; --line-soft:#332e24;
+  --or:#dcae58; --or-bg:#34280f;
+  --fr:#d2a85e; --fr-bg:#2e2412;
+  --nf:#62c48f; --nf-bg:#152c1f;
+  --alerte:#e08a6c; --alerte-bg:#36201a;
+}}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  -webkit-font-smoothing:antialiased; line-height:1.55}
+a{color:var(--or)}
+.lieu{color:var(--or); text-decoration:underline dotted;
+  text-decoration-color:color-mix(in srgb, var(--or) 50%, transparent);
+  text-underline-offset:2.5px}
+.lieu::after{content:""; display:inline-block; width:.66em; height:.66em; margin-left:.2em;
+  vertical-align:-.02em; background-color:currentColor; opacity:.75;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%202a7%207%200%200%200-7%207c0%205.3%207%2013%207%2013s7-7.7%207-13a7%207%200%200%200-7-7zm0%209.6A2.6%202.6%200%201%201%2012%206.4a2.6%202.6%200%200%201%200%205.2z%22%2F%3E%3C%2Fsvg%3E") center/contain no-repeat; mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%202a7%207%200%200%200-7%207c0%205.3%207%2013%207%2013s7-7.7%207-13a7%207%200%200%200-7-7zm0%209.6A2.6%202.6%200%201%201%2012%206.4a2.6%202.6%200%200%201%200%205.2z%22%2F%3E%3C%2Fsvg%3E") center/contain no-repeat}
+.lieu:hover{text-decoration-style:solid; text-decoration-color:var(--or)}
+.lieu:hover::after{opacity:1}
+.bandeau{position:sticky; top:0; z-index:5; background:color-mix(in srgb,var(--surface) 94%, transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--line-soft);
+  padding:11px 24px; display:flex; align-items:center; gap:14px; font-size:13px}
+.bandeau .retour{text-decoration:none; font-weight:600}
+.bandeau .retour:hover{text-decoration:underline; text-underline-offset:2px}
+.bandeau .fil{color:var(--faint)}
+main{max-width:1180px; margin:0 auto; padding:30px 24px 90px;
+  display:grid; grid-template-columns:1fr; gap:0 44px}
+@media(min-width:1040px){ main{grid-template-columns:186px minmax(0,1fr)} }
+.cote{display:none}
+@media(min-width:1040px){ .cote{display:block; position:sticky; top:72px; align-self:start; padding-top:8px} }
+.cote a{display:block; font-size:12.2px; color:var(--muted); text-decoration:none;
+  padding:5px 0 5px 11px; border-left:2px solid var(--line-soft); line-height:1.35}
+.cote a:hover{color:var(--or); border-left-color:var(--or)}
+.colonne{min-width:0}
+.entete{display:flex; gap:22px; align-items:center; margin:0 0 28px; flex-wrap:wrap}
+.portrait{width:112px; height:112px; border-radius:50%; object-fit:cover;
+  border:4px solid var(--or); background:var(--surface-2); flex-shrink:0}
+.mono{width:112px; height:112px; border-radius:50%; background:var(--surface-2);
+  border:4px solid var(--line); display:grid; place-items:center;
+  font-size:36px; font-weight:600; color:var(--faint); flex-shrink:0}
+h1{margin:0 0 3px; font-size:31px; font-weight:600; line-height:1.14; letter-spacing:-.2px}
+.dates{margin:0; font-size:15px; color:var(--muted); font-variant-numeric:tabular-nums}
+.surnom{margin:2px 0 0; font-size:14px; color:var(--faint); font-style:italic}
+.jetons{margin-top:9px}
+.jeton{display:inline-block; font-size:10.5px; padding:2.5px 9px; border-radius:99px;
+  margin:0 5px 5px 0; font-weight:600; letter-spacing:.2px}
+.j-fr{background:var(--fr-bg); color:var(--fr)}
+.j-nf{background:var(--nf-bg); color:var(--nf)}
+.j-or{background:var(--or-bg); color:var(--or)}
+.j-al{background:var(--alerte-bg); color:var(--alerte)}
+section{margin:0 0 30px; scroll-margin-top:72px}
+h2{margin:0 0 13px; font-size:11px; text-transform:uppercase; letter-spacing:1.1px;
+  color:var(--faint); font-weight:700; padding-bottom:7px; border-bottom:1px solid var(--line-soft)}
+dl.faits{display:grid; grid-template-columns:auto 1fr; gap:9px 18px; margin:0; font-size:14.6px}
+dl.faits dt{color:var(--faint); font-size:10.5px; text-transform:uppercase; letter-spacing:.7px;
+  font-weight:700; padding-top:3px; white-space:nowrap}
+dl.faits dd{margin:0}
+dl.faits dd small{display:block; color:var(--muted); font-size:12.6px; line-height:1.45; margin-top:2px}
+ul.marquants{list-style:none; margin:0; padding:0}
+ul.marquants li{position:relative; padding-left:19px; font-size:15px; line-height:1.55; margin-bottom:11px}
+ul.marquants li::before{content:""; position:absolute; left:0; top:9px; width:7px; height:7px;
+  border-radius:50%; background:var(--or)}
+.texte p{font-size:15.2px; line-height:1.68; margin:0 0 13px; max-width:68ch}
+ul.puces{margin:0; padding-left:19px; font-size:14.8px}
+ul.puces li{margin-bottom:8px; line-height:1.55}
+.intro{font-size:13.4px; color:var(--muted); font-style:italic; margin:0 0 13px; line-height:1.5}
+.chrono{list-style:none; margin:0; padding:0 0 0 3px; position:relative}
+.chrono::before{content:""; position:absolute; left:5.5px; top:8px; bottom:8px; width:1.5px; background:var(--line-soft)}
+.chrono li{position:relative; padding:0 0 18px 26px; font-size:14.6px; line-height:1.55}
+.chrono li::before{content:""; position:absolute; left:0; top:7px; width:10px; height:10px;
+  border-radius:50%; background:var(--bg); border:2.5px solid var(--or)}
+.chrono .d{display:block; font-size:11.4px; color:var(--faint); font-variant-numeric:tabular-nums;
+  letter-spacing:.3px; margin-bottom:1px}
+.chrono .t{font-weight:600}
+.chrono .x{display:block; color:var(--muted); font-size:13.6px; line-height:1.52; margin-top:3px; max-width:62ch}
+table{width:100%; border-collapse:collapse; font-size:14px; margin:0}
+th{text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.7px; color:var(--faint);
+  border-bottom:1.5px solid var(--line); padding:7px 12px 7px 0; font-weight:700}
+td{padding:9px 12px 9px 0; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.48}
+.voile{border:1px dashed var(--alerte); border-radius:9px; background:var(--alerte-bg); padding:15px 17px}
+.voile button{border:0; background:transparent; cursor:pointer; color:var(--alerte); font:inherit;
+  font-size:14px; font-weight:600; padding:0; text-align:left; line-height:1.5}
+.voile button span{display:block; font-weight:400; color:var(--muted); font-size:12.6px; margin-top:3px}
+.voile[data-ouvert="1"]{background:transparent; border-style:solid; border-color:var(--line-soft)}
+.avis{background:var(--alerte-bg); border-left:3px solid var(--alerte); padding:13px 15px;
+  border-radius:0 7px 7px 0; font-size:14px; line-height:1.55; margin:0 0 11px}
+.avis b{color:var(--alerte); text-transform:uppercase; font-size:10.5px; letter-spacing:.7px}
+.src{font-size:13px; color:var(--faint); font-style:italic; line-height:1.55; margin:0}
+.rel{display:grid; grid-template-columns:auto 1fr; gap:9px 18px; font-size:14.6px; margin:0}
+.rel dt{color:var(--faint); font-size:10.5px; text-transform:uppercase; letter-spacing:.7px;
+  font-weight:700; padding-top:3px; white-space:nowrap}
+.rel dd{margin:0}
+.marque-cert{font-size:10px; font-weight:700; padding:1.5px 6px; border-radius:4px; margin-left:6px; letter-spacing:.2px}
+.c-approximative{background:var(--surface-2); color:var(--muted)}
+.c-deduite{background:var(--fr-bg); color:var(--fr)}
+.c-divergente,.c-incoherente,.c-inconnue{background:var(--alerte-bg); color:var(--alerte)}
+footer{border-top:1px solid var(--line-soft); margin:46px 0 0; padding:18px 0 0;
+  font-size:12px; color:var(--faint); line-height:1.6}
+</style>
+</head>
+<body>
+<div class="bandeau"><a class="retour" href="../__ARBRE__">&larr; L'arbre</a><span class="fil">__TITRE_ARBRE__</span></div>
+<main>
+  <nav class="cote">__COTE__</nav>
+  <div class="colonne">
+    <div class="entete">__PORTRAIT__
+      <div><h1>__NOM__</h1>__DATES____SURNOM__<div class="jetons">__JETONS__</div></div>
+    </div>
+    __CORPS__
+    <footer>__PIED__</footer>
+  </div>
+</main>
+<script>
+document.querySelectorAll(".voile button").forEach(b=>b.addEventListener("click",()=>{
+  const v=b.closest(".voile"), c=v.querySelector(".voile-contenu");
+  const o=v.getAttribute("data-ouvert")==="1";
+  v.setAttribute("data-ouvert", o?"0":"1"); c.hidden=o;
+  b.firstChild.nodeValue = o ? "Contenu confidentiel — cliquer pour afficher"
+                             : "Contenu confidentiel — cliquer pour masquer";
+}));
+</script>
+</body>
+</html>
+"""
+
+LIB_CERT = {"approximative": "approx.", "deduite": "déduit", "divergente": "divergent",
+            "incoherente": "incohérent", "inconnue": "inconnu"}
+
+
+def esc(s):
+    return (str("" if s is None else s).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def nom_complet(p):
+    return ((p.get("prenom") or "") + " " + (p.get("nom") or "")).strip()
+
+
+def initiales(p):
+    a = (p.get("prenom") or "?").strip()[:1] or "?"
+    b = (p.get("nom") or "").strip()[:1]
+    return (a + b).upper()
+
+
+def _an(f):
+    if not f:
+        return None
+    if isinstance(f.get("tri"), int):
+        return f["tri"]
+    import re as _re
+    m = _re.search(r"(1[5-9]\d{2})", f.get("texte", "") or "")
+    return int(m.group(1)) if m else None
+
+
+def vie(p):
+    n = _an(p.get("naissance")) or _an(p.get("bapteme"))
+    d = _an(p.get("deces")) or _an(p.get("sepulture"))
+    ap = lambda f: bool(f) and f.get("certitude") in ("approximative", "deduite")
+    g = "~" if (ap(p.get("naissance")) or ap(p.get("bapteme"))) else ""
+    h = "~" if (ap(p.get("deces")) or ap(p.get("sepulture"))) else ""
+    if n and d:
+        return f"{g}{n} – {h}{d}"
+    if n:
+        return f"{g}{n} –"
+    if d:
+        return f"– {h}{d}"
+    return ""
+
+
+def cert_html(x):
+    c = (x or {}).get("certitude")
+    if not c or c == "attestee":
+        return ""
+    return f'<span class="marque-cert c-{c}">{LIB_CERT.get(c, c)}</span>'
+
+
+def nettoyer_lieu(t):
+    import re as _re
+    t = _re.sub(r"\([^)]*\)", " ", str(t or ""))
+    t = _re.sub(r"\s{2,}", " ", t).strip()
+    return t.strip(" ,;")
+
+
+def url_carte(texte, carte):
+    """Lien cartographique pour un lieu, ou None.
+    La table meta.carte.lieux prime ; une valeur vide désactive le lien."""
+    if not carte or carte.get("actif") is False:
+        return None
+    from urllib.parse import quote
+    table = carte.get("lieux") or {}
+    q = table[texte] if texte in table else nettoyer_lieu(texte)
+    if not q:
+        return None
+    service = carte.get("service") or "https://www.google.com/maps/search/?api=1&query="
+    return service + quote(q)
+
+
+def lieu_html(texte, carte):
+    u = url_carte(texte, carte)
+    if not u:
+        return esc(texte)
+    return (f'<a class="lieu" href="{esc(u)}" target="_blank" rel="noopener" '
+            f'title="Voir sur la carte">{esc(texte)}</a>')
+
+
+def _aplatir(t):
+    return t.replace("\u2019", "'").lower()
+
+
+def _est_lettre(c):
+    import re as _re
+    return bool(c) and bool(_re.match(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ'\u2019]", c))
+
+
+def lier_lieux(txt, carte):
+    """Reconnaît les toponymes dans un texte DÉJÀ ÉCHAPPÉ et les rend cliquables.
+    Une seule occurrence par nom et par bloc, pour ne pas surcharger la lecture."""
+    if not carte or carte.get("actif") is False or not txt:
+        return txt
+    from urllib.parse import quote
+    topo = {k: v for k, v in (carte.get("toponymes") or {}).items() if v}
+    if not topo:
+        return txt
+    service = carte.get("service") or "https://www.google.com/maps/search/?api=1&query="
+    res = str(txt)
+    pris = []
+    for nom in sorted(topo, key=len, reverse=True):
+        cible = _aplatir(nom)
+        n = len(cible)
+        depart, i = 0, -1
+        while True:
+            i = _aplatir(res).find(cible, depart)
+            if i < 0:
+                break
+            dans_balise = res.rfind("<", 0, i + 1) > res.rfind(">", 0, i + 1)
+            chevauche = any(i < b and i + n > a for a, b in pris)
+            avant = res[i - 1] if i > 0 else ""
+            apres = res[i + n] if i + n < len(res) else ""
+            if not _est_lettre(avant) and not _est_lettre(apres) and not dans_balise and not chevauche:
+                break
+            depart = i + 1
+        if i < 0:
+            continue
+        brut = res[i:i + n]
+        a = (f'<a class="lieu" href="{service}{quote(topo[nom])}" target="_blank" '
+             f'rel="noopener" title="Voir sur la carte">{brut}</a>')
+        res = res[:i] + a + res[i + n:]
+        d = len(a) - n
+        pris = [[x + d, y + d] if x > i else [x, y] for x, y in pris]
+        pris.append([i, i + len(a)])
+    return res
+
+
+def tl(txt, carte):
+    """Échappe puis enrichit de liens de lieux."""
+    return lier_lieux(esc(txt), carte)
+
+
+def lien(pid, personnes, texte=None):
+    p = personnes.get(pid)
+    if not p:
+        return esc(pid)
+    return f'<a href="{esc(pid)}.html">{esc(texte or nom_complet(p))}</a>'
+
+
+def section_page_html(s, carte=None):
+    t = s.get("type") or ("liste" if isinstance(s.get("contenu"), list) else "texte")
+    c = s.get("contenu")
+    # Les sections confidentielles ne sont jamais parcourues pour y chercher
+    # des lieux : une adresse privée n'a pas à devenir une requête Google.
+    T = (lambda x: esc(x)) if s.get("prive") else (lambda x: tl(x, carte))
+    h = f'<p class="intro">{esc(s["intro"])}</p>' if s.get("intro") else ""
+    if t == "texte":
+        items = c if isinstance(c, list) else [c]
+        h += '<div class="texte">' + "".join(f"<p>{T(x)}</p>" for x in items) + "</div>"
+    elif t == "liste":
+        h += '<ul class="puces">' + "".join(f"<li>{T(x)}</li>" for x in (c or [])) + "</ul>"
+    elif t == "faits":
+        h += '<dl class="faits">' + "".join(
+            f'<dt>{esc(f.get("q",""))}</dt><dd>{T(f.get("r",""))}{cert_html(f)}'
+            + (f'<small>{T(f["note"])}</small>' if f.get("note") else "") + "</dd>"
+            for f in (c or [])) + "</dl>"
+    elif t == "chrono":
+        h += '<ol class="chrono">' + "".join(
+            f'<li><span class="d">{esc(e.get("date",""))}</span>'
+            f'<span class="t">{T(e.get("titre",""))}</span>'
+            + (f'<span class="x">{T(e["detail"])}</span>' if e.get("detail") else "")
+            + (f'<span class="x">{lieu_html(e["lieu"], carte)}</span>' if e.get("lieu") else "")
+            + "</li>"
+            for e in (c or [])) + "</ol>"
+    elif t == "tableau":
+        col = (c or {}).get("colonnes", [])
+        lig = (c or {}).get("lignes", [])
+        h += ("<table><thead><tr>" + "".join(f"<th>{esc(x)}</th>" for x in col)
+              + "</tr></thead><tbody>"
+              + "".join("<tr>" + "".join(f"<td>{T(x)}</td>" for x in (r or [])) + "</tr>" for r in lig)
+              + "</tbody></table>")
+    else:
+        h += f"<p>{esc(c)}</p>"
+    if s.get("source"):
+        h += f'<p class="src" style="margin-top:11px">{esc(s["source"])}</p>'
+    return h
+
+
+def construire_page(pid, donnees, nom_arbre, date_gen):
+    personnes = donnees["personnes"]
+    p = personnes[pid]
+    unions = donnees.get("unions", [])
+    mes_unions = [u for u in unions if pid in u.get("conjoints", [])]
+    union_parente = next((u for u in unions if pid in (u.get("enfants") or [])), None)
+    carte = donnees.get("meta", {}).get("carte")
+
+    # ---- bandeaux d'identité ----
+    jetons = ('<span class="jeton j-nf">Nouvelle-France</span>' if p.get("pays") == "nf"
+              else '<span class="jeton j-fr">France</span>')
+    if p.get("ancetre"):
+        jetons += '<span class="jeton j-or">Ancêtre canadien</span>'
+    elif p.get("lignee"):
+        jetons += '<span class="jeton j-or">Lignée directe</span>'
+    if p.get("lacune"):
+        jetons += '<span class="jeton j-al">Rattachement non documenté</span>'
+    if any(s.get("prive") for s in p.get("sections", [])):
+        jetons += '<span class="jeton j-al">Contient du confidentiel</span>'
+
+    portrait = (f'<img class="portrait" src="{p["_photo"]}" alt="">' if p.get("_photo")
+                else f'<div class="mono">{esc(initiales(p))}</div>')
+    v = vie(p)
+    dates = f'<p class="dates">{esc(v)}</p>' if v else ""
+    surnom = f'<p class="surnom">{esc(p["surnom"])}</p>' if p.get("surnom") else ""
+
+    corps, cote = [], []
+
+    def ajoute(ancre, titre, contenu):
+        if not contenu:
+            return
+        corps.append(f'<section id="{ancre}"><h2>{esc(titre)}</h2>{contenu}</section>')
+        cote.append(f'<a href="#{ancre}">{esc(titre)}</a>')
+
+    # ---- synthèse ----
+    L = []
+    for lib, cle in (("Naissance", "naissance"), ("Baptême", "bapteme"),
+                     ("Décès", "deces"), ("Sépulture", "sepulture")):
+        x = p.get(cle)
+        if x:
+            L.append(f'<dt>{lib}</dt><dd>{tl(x.get("texte","—"), carte)}{cert_html(x)}'
+                     + (f'<small>{tl(x["note"], carte)}</small>' if x.get("note") else "") + "</dd>")
+    if p.get("variantes"):
+        L.append(f'<dt>Variantes</dt><dd>{esc(", ".join(p["variantes"]))}</dd>')
+    if p.get("metiers"):
+        L.append("<dt>Métier</dt><dd>" + "<br>".join(esc(m) for m in p["metiers"]) + "</dd>")
+    if p.get("lieux"):
+        L.append("<dt>Lieux</dt><dd>" + "<br>".join(lieu_html(m, carte) for m in p["lieux"]) + "</dd>")
+    ajoute("synthese", "Synthèse", f'<dl class="faits">{"".join(L)}</dl>' if L else "")
+
+    # ---- faits marquants ----
+    if p.get("marquants"):
+        ajoute("marquants", "Faits marquants",
+               '<ul class="marquants">' + "".join(f"<li>{tl(m, carte)}</li>" for m in p["marquants"]) + "</ul>")
+
+    # ---- notes ----
+    if p.get("notes"):
+        ajoute("notes", "Notes",
+               '<ul class="puces">' + "".join(f"<li>{tl(m, carte)}</li>" for m in p["notes"]) + "</ul>")
+
+    # ---- sections versées ----
+    for i, s in enumerate(p.get("sections", [])):
+        inner = section_page_html(s, carte)
+        if s.get("prive"):
+            inner = ('<div class="voile" data-ouvert="0"><button type="button">'
+                     "Contenu confidentiel — cliquer pour afficher"
+                     "<span>Masqué par défaut, et absent de la version partageable.</span>"
+                     f'</button><div class="voile-contenu" hidden>{inner}</div></div>')
+        ajoute(f"s{i}", s.get("titre") or f"Section {i+1}", inner)
+
+    # ---- relations ----
+    R = []
+    if union_parente:
+        R.append("<dt>Parents</dt><dd>"
+                 + " &amp; ".join(lien(c, personnes) for c in union_parente["conjoints"]) + "</dd>")
+        fratrie = [e for e in (union_parente.get("enfants") or []) if e != pid]
+        if fratrie:
+            R.append("<dt>Fratrie</dt><dd>"
+                     + ", ".join(lien(e, personnes, (personnes.get(e) or {}).get("prenom")) for e in fratrie)
+                     + "</dd>")
+    for u in mes_unions:
+        autre = next((c for c in u["conjoints"] if c != pid), None)
+        det = []
+        if u.get("mariage"):
+            det.append("mariage : " + esc(u["mariage"]["texte"]))
+        if u.get("contrat"):
+            det.append("contrat : " + esc(u["contrat"]["texte"]))
+        for n in (u.get("notes") or []):
+            det.append(esc(n))
+        R.append("<dt>Union</dt><dd>" + (lien(autre, personnes) if autre else "—")
+                 + "".join(f'<small style="display:block;color:var(--muted);font-size:12.6px;'
+                           f'line-height:1.45;margin-top:3px">{d}</small>' for d in det) + "</dd>")
+        enfants = u.get("enfants") or []
+        if enfants:
+            R.append("<dt>Enfants</dt><dd>"
+                     + ", ".join(lien(e, personnes, (personnes.get(e) or {}).get("prenom")) for e in enfants)
+                     + "</dd>")
+    ajoute("relations", "Relations", f'<dl class="rel">{"".join(R)}</dl>' if R else "")
+
+    # ---- points à vérifier ----
+    pbs = [x for x in donnees.get("problemes", []) if pid in (x.get("personnes") or [])]
+    if pbs:
+        ajoute("verifier", "À vérifier", "".join(
+            f'<div class="avis"><b>{esc(x.get("type",""))} — p. {esc(x.get("pages","?"))}</b><br>'
+            f'{tl(x.get("description",""), carte)}</div>' for x in pbs))
+
+    # ---- sources ----
+    if p.get("sources"):
+        ajoute("sources", "Source", f'<p class="src">{esc(" · ".join(p["sources"]))}</p>')
+
+    if not p.get("_photo"):
+        corps.append('<p class="src">Pas de portrait. Déposez une image nommée '
+                     f'<code>{esc(pid)}.jpg</code> dans le dossier <code>photos</code>, '
+                     "puis relancez le générateur.</p>")
+
+    meta = donnees.get("meta", {})
+    pied = (f'Fiche générée le {date_gen} à partir de <strong>{esc(meta.get("titre",""))}</strong>. '
+            "Les mentions « approx. », « déduit », « divergent » et « incohérent » signalent ce que la "
+            "source ne garantit pas. Rien n'a été complété par recherche extérieure.")
+
+    return (GABARIT_PAGE
+            .replace("__COTE__", "".join(cote))
+            .replace("__CORPS__", "".join(corps))
+            .replace("__PORTRAIT__", portrait)
+            .replace("__DATES__", dates)
+            .replace("__SURNOM__", surnom)
+            .replace("__JETONS__", jetons)
+            .replace("__PIED__", pied)
+            .replace("__ARBRE__", nom_arbre)
+            .replace("__TITRE_ARBRE__", esc(meta.get("titre", "Arbre généalogique")))
+            .replace("__NOM__", esc(nom_complet(p))))
+
+
+def retirer_confidentiel(personnes):
+    """Supprime physiquement les sections marquées prive du jeu de données.
+    Rien n'est masqué par CSS : le contenu n'existe pas dans le fichier produit."""
+    retires = 0
+    for p in personnes.values():
+        sections = p.get("sections")
+        if not sections:
+            continue
+        gardees = [s for s in sections if not s.get("prive")]
+        retires += len(sections) - len(gardees)
+        if gardees:
+            p["sections"] = gardees
+        else:
+            p.pop("sections", None)
+    return retires
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    partage = "--partage" in sys.argv
+
+    racine = Path(__file__).resolve().parent.parent   # le script vit dans src/
+    source = Path(args[0]).resolve() if args else racine / "genealogie_jean.json"
+
+    if not source.exists():
+        print(f"ERREUR : fichier introuvable -> {source}")
+        return 1
+    try:
+        donnees = json.loads(source.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        print("ERREUR : le fichier JSON est mal formé.")
+        print(f"  ligne {e.lineno}, colonne {e.colno} : {e.msg}")
+        return 1
+
+    personnes = donnees.get("personnes", {})
+
+    # --- photos ---
+    dossier_photos = source.parent / "photos"
+    dossier_photos.mkdir(exist_ok=True)
+    nb_photos, poids = 0, 0
+    for pid, p in personnes.items():
+        chemin = trouver_photo(dossier_photos, pid, p.get("photo"))
+        if chemin:
+            uri, taille = charger_photo(chemin)
+            p["_photo"] = uri
+            nb_photos += 1
+            poids += taille
+
+    # --- aide-mémoire des noms de fichiers attendus ---
+    lignes = ["# Noms de fichiers attendus pour les portraits",
+              "#",
+              "# Déposez l'image dans ce dossier en la nommant d'après l'identifiant,",
+              "# par exemple : pierre-jean-1645.jpg",
+              "# Formats acceptés : " + ", ".join(e.lstrip('.') for e in EXTENSIONS),
+              "# L'image est recadrée en carré et réduite automatiquement.",
+              ""]
+    for pid, p in sorted(personnes.items(), key=lambda kv: (kv[1].get("nom", ""), kv[1].get("prenom", ""))):
+        nom = (p.get("prenom", "") + " " + p.get("nom", "")).strip()
+        etat = "  [photo présente]" if p.get("_photo") else ""
+        lignes.append(f"{pid + '.jpg':<34} {nom}{etat}")
+    (dossier_photos / "_noms_de_fichiers.txt").write_text("\n".join(lignes) + "\n", encoding="utf-8")
+
+    # --- confidentialité ---
+    total_prive = sum(len([s for s in p.get("sections", []) if s.get("prive")])
+                      for p in personnes.values())
+    retires = retirer_confidentiel(personnes) if partage else 0
+
+    meta = donnees.get("meta", {})
+    titre = meta.get("titre", "Arbre généalogique")
+    sous = meta.get("sous_titre", "")
+    if partage:
+        sous = (sous + " · version partageable" if sous else "version partageable")
+
+    # chaque jeu de données a son propre dossier de fiches : pas d'écrasement
+    nom_dossier_fiches = (source.stem.replace("genealogie_", "arbre_")
+                          + ("_partage" if partage else "") + "_fiches")
+    html = (GABARIT
+            .replace("__DONNEES__", json.dumps(donnees, ensure_ascii=False))
+            .replace("__DOSSIER_FICHES__", nom_dossier_fiches)
+            .replace("__TITRE__", titre)
+            .replace("__SOUS_TITRE__", sous))
+
+    base = source.stem.replace("genealogie_", "arbre_")
+    sortie = source.with_name(base + ("_partage" if partage else "") + ".html")
+    if sortie == source:
+        sortie = source.with_suffix(".html")
+    sortie.write_text(html, encoding="utf-8")
+
+    # --- une page complète par personne, cible du lien « En savoir plus » ---
+    from datetime import date
+    dossier_fiches = source.parent / nom_dossier_fiches
+    dossier_fiches.mkdir(exist_ok=True)
+    date_gen = date.today().strftime("%d/%m/%Y")
+    attendus = set()
+    for pid in personnes:
+        nom = f"{pid}.html"
+        attendus.add(nom)
+        (dossier_fiches / nom).write_text(
+            construire_page(pid, donnees, sortie.name, date_gen), encoding="utf-8")
+
+    # Les fiches de personnes retirées du JSON deviennent orphelines.
+    # On ne supprime jamais de fichier sans le dire : on signale, c'est tout.
+    orphelines = sorted(f.name for f in dossier_fiches.glob("*.html")
+                        if f.name not in attendus)
+
+    nb_p, nb_u = len(personnes), len(donnees.get("unions", []))
+    nb_pb = len(donnees.get("problemes", []))
+    nb_sect = sum(len(p.get("sections", [])) for p in personnes.values())
+    print(f"Arbre généré : {sortie.name}  ({sortie.stat().st_size // 1024} Ko)")
+    print(f"  {nb_p} personnes · {nb_u} unions · {nb_sect} sections · {nb_pb} points à vérifier")
+    print(f"  {nb_p} fiches complètes dans le dossier {nom_dossier_fiches}/")
+    if orphelines:
+        print(f"  {len(orphelines)} fiche(s) orpheline(s) — personne retirée du JSON, "
+              "fichier laissé en place :")
+        for o in orphelines[:10]:
+            print(f"      {o}")
+        if len(orphelines) > 10:
+            print(f"      … et {len(orphelines)-10} autres")
+        print("      Supprimez-les vous-même si elles ne servent plus.")
+    if nb_photos:
+        print(f"  {nb_photos} portrait(s) integre(s) ({poids // 1024} Ko)")
+    else:
+        print("  aucun portrait — voir photos/_noms_de_fichiers.txt pour les noms attendus")
+    if partage:
+        print(f"  VERSION PARTAGEABLE : {retires} section(s) confidentielle(s) retirée(s) du fichier.")
+    elif total_prive:
+        print(f"  ATTENTION : {total_prive} section(s) confidentielle(s) sont DANS ce fichier.")
+        print("              Pour une copie à transmettre, utilisez Generer_Version_Partageable.bat")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

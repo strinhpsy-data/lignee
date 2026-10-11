@@ -1,0 +1,236 @@
+{
+  "meta": {
+    "titre": "Exemple — une fiche dense",
+    "sous_titre": "Gabarit de démonstration : tous les types de sections, dont une confidentielle"
+  },
+  "problemes": [],
+  "personnes": {
+    "aieul-exemple": {
+      "prenom": "Aïeul",
+      "nom": "Exemple",
+      "sexe": "M",
+      "pays": "fr",
+      "lignee": true,
+      "naissance": {
+        "texte": "vers 1900",
+        "certitude": "approximative",
+        "tri": 1900
+      },
+      "deces": {
+        "texte": "1968",
+        "certitude": "attestee",
+        "tri": 1968
+      },
+      "metiers": [
+        "menuisier"
+      ],
+      "sources": [
+        "Fiche de démonstration — aucune donnée réelle"
+      ]
+    },
+    "aieule-exemple": {
+      "prenom": "Aïeule",
+      "nom": "Démonstration",
+      "sexe": "F",
+      "pays": "fr",
+      "lignee": true,
+      "naissance": {
+        "texte": "1904",
+        "certitude": "attestee",
+        "tri": 1904
+      },
+      "deces": {
+        "texte": "1991",
+        "certitude": "attestee",
+        "tri": 1991
+      },
+      "sources": [
+        "Fiche de démonstration — aucune donnée réelle"
+      ]
+    },
+    "personne-contemporaine": {
+      "prenom": "Personne",
+      "nom": "Contemporaine",
+      "sexe": "F",
+      "pays": "nf",
+      "lignee": true,
+      "ancetre": true,
+      "surnom": "fiche de démonstration — personnage fictif",
+      "naissance": {
+        "texte": "12 mars 1952, Québec",
+        "certitude": "attestee",
+        "tri": 1952
+      },
+      "metiers": [
+        "institutrice",
+        "libraire"
+      ],
+      "lieux": [
+        "Québec",
+        "Rimouski",
+        "Saint-Augustin-de-Desmaures"
+      ],
+      "notes": [
+        "Cette fiche n'existe que pour montrer jusqu'où une fiche peut aller. Aucune information n'est réelle.",
+        "Les notes restent en haut : ce sont les remarques courtes qui n'appartiennent à aucune rubrique."
+      ],
+      "marquants": [
+        "Les « faits marquants » sont les lignes courtes qui apparaissent sur la carte flottante, au clic sur le médaillon.",
+        "C'est là que vont les choses qui se racontent : un exploit, une condamnation, un sauvetage, une invention.",
+        "Trois ou quatre suffisent — le reste va dans les sections, derrière « En savoir plus »."
+      ],
+      "sections": [
+        {
+          "titre": "Récit de vie",
+          "type": "texte",
+          "intro": "Le type « texte » accepte un paragraphe ou une suite de paragraphes.",
+          "contenu": [
+            "Un texte suivi, pour les récits recueillis auprès de la famille ou les notes d'entretien. Il n'y a pas de limite de longueur : la section se replie, et le sommaire en haut de la fiche permet d'y revenir directement.",
+            "Chaque section porte son propre repli. Quand une personne en compte trois ou plus, une barre de recherche interne apparaît automatiquement en haut de la fiche."
+          ]
+        },
+        {
+          "titre": "Repères",
+          "type": "faits",
+          "intro": "Le type « faits » affiche des couples question / réponse, avec le même marquage de certitude que la synthèse.",
+          "contenu": [
+            {
+              "q": "Lieu de naissance",
+              "r": "Hôpital Saint-Sacrement, Québec"
+            },
+            {
+              "q": "Baptême",
+              "r": "paroisse Saint-Charles-de-Limoilou, 16 mars 1952"
+            },
+            {
+              "q": "Scolarité",
+              "r": "École normale, brevet A",
+              "note": "Date exacte à confirmer auprès de l'établissement."
+            },
+            {
+              "q": "Langue d'usage",
+              "r": "français",
+              "certitude": "approximative"
+            }
+          ]
+        },
+        {
+          "titre": "Chronologie",
+          "type": "chrono",
+          "contenu": [
+            {
+              "date": "1952",
+              "titre": "Naissance",
+              "detail": "Québec."
+            },
+            {
+              "date": "1970 – 1974",
+              "titre": "Études",
+              "detail": "École normale puis premier poste."
+            },
+            {
+              "date": "1978",
+              "titre": "Mariage"
+            },
+            {
+              "date": "1991",
+              "titre": "Ouverture de la librairie",
+              "detail": "Rue Saint-Jean."
+            },
+            {
+              "date": "2017",
+              "titre": "Retraite"
+            }
+          ]
+        },
+        {
+          "titre": "Adresses successives",
+          "type": "tableau",
+          "contenu": {
+            "colonnes": [
+              "Période",
+              "Adresse",
+              "Remarque"
+            ],
+            "lignes": [
+              [
+                "1952 – 1970",
+                "Limoilou, Québec",
+                "maison familiale"
+              ],
+              [
+                "1970 – 1978",
+                "Rimouski",
+                "premier poste d'enseignement"
+              ],
+              [
+                "1978 – 2003",
+                "Sainte-Foy",
+                "–"
+              ],
+              [
+                "2003 – ",
+                "Saint-Augustin-de-Desmaures",
+                "–"
+              ]
+            ]
+          }
+        },
+        {
+          "titre": "Documents retrouvés",
+          "type": "liste",
+          "contenu": [
+            "Acte de baptême, copie certifiée, 1998",
+            "Brevet d'enseignement, original",
+            "Album photo 1958-1972, chez sa sœur",
+            "Lettres à sa mère, 1970-1974, douze pièces"
+          ],
+          "source": "Inventaire fait en octobre 2026"
+        },
+        {
+          "titre": "Dossier médical",
+          "prive": true,
+          "type": "texte",
+          "intro": "Exemple de section confidentielle.",
+          "contenu": [
+            "Une section marquée « prive » est masquée derrière un voile : elle ne s'affiche qu'après un clic délibéré. La recherche interne ne la fouille pas — elle n'en lit que le titre, pour ne pas lever le voile par accident.",
+            "Surtout : le script Generer_Version_Partageable.bat produit une copie du fichier d'où ces sections sont physiquement absentes. Ce n'est pas un masquage d'affichage, c'est une suppression à la génération."
+          ]
+        },
+        {
+          "titre": "Antécédents familiaux",
+          "prive": true,
+          "type": "liste",
+          "contenu": [
+            "Une seconde section confidentielle, pour montrer qu'elles s'additionnent.",
+            "Le bandeau « Contient du confidentiel » apparaît alors en haut de la fiche."
+          ]
+        }
+      ],
+      "sources": [
+        "Fiche de démonstration — aucune donnée réelle"
+      ]
+    }
+  },
+  "unions": [
+    {
+      "id": "u-ex",
+      "conjoints": [
+        "aieul-exemple",
+        "aieule-exemple"
+      ],
+      "lignee": true,
+      "mariage": {
+        "texte": "1928",
+        "certitude": "attestee"
+      },
+      "enfants": [
+        "personne-contemporaine"
+      ]
+    }
+  ],
+  "racines": [
+    "u-ex"
+  ],
+  "detaches": []
+}
