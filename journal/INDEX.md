@@ -9,3 +9,5 @@ il doit suffire à savoir où regarder.
 | `C-002` | 2026-10-11 | Ajustements de déploiement sur dellg5 | aucun |
 | `C-003` | 2026-10-11 | Contrôles hermétiques : atelier `tests/_sorties/` | aucun ajouté ni retiré |
 | `C-004` | 2026-10-11 | Note sur le poste neuf : le générateur échoue sans les données | aucun |
+| `C-005` | 2026-10-11 | Cadrage de la phase 1 : l'arbre de Samuel (doc-v2) | aucun — `tests/` inchangé |
+| `C-006` | 2026-10-11 | Deux fausses alarmes retirées du contrat | aucun ajouté ni retiré — empreinte reposée |

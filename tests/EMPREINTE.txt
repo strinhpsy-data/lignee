@@ -4,4 +4,4 @@
 # Ne pas modifier à la main. Si un contrôle vous semble faux,
 # inscrivez une question Q-xx au journal et poursuivez ailleurs.
 #
-9009a9819a4227b4cdcdc45f0c668c000048ba62ba440dc4811e5182bc214d06  contrat.py
+5fe5a6ab655548f73f41432440d5e7379c53bfaaa98480ea148a9819e271e0f0  contrat.py

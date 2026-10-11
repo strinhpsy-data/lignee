@@ -362,7 +362,7 @@ def controler_navigateur(sortie, d):
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        saut("couche navigateur", "Playwright absent — voir DOC/SPECIFICATION.md")
+        saut("couche navigateur", "Playwright absent — voir docs/avant/02-environnement.md")
         return
 
     P = d["personnes"]
@@ -432,6 +432,13 @@ def une_passe(chemin, sans_nav):
     print("\n" + "=" * 62)
     print(f"  JEU DE DONNÉES — {chemin.name}")
     print("=" * 62)
+
+    # Le détecteur de doublons ne vaut qu'à l'intérieur d'une passe : chaque jeu
+    # de données rejoue légitimement les mêmes codes. Sans cette remise à zéro,
+    # la deuxième passe criait au loup sur chacun de ses contrôles — et une
+    # alarme qui se trompe vingt-cinq fois par exécution apprend à l'ignorer.
+    _vus.clear()
+
     if not chemin.exists():
         print(f"\nERREUR : fichier introuvable -> {chemin}")
         return False

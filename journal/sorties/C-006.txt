@@ -1,0 +1,129 @@
+==============================================================
+  CONTRAT DE VÉRIFICATION — arbre généalogique
+==============================================================
+
+==============================================================
+  JEU DE DONNÉES — exemple_fiche_dense.json
+==============================================================
+
+A1. Le fichier de données
+-------------------------
+  OK    T-01  le fichier se lit
+  OK    T-03  le JSON est bien formé
+  OK    T-35  la clé « personnes » existe
+  OK    T-36  la clé « unions » existe
+
+A2. Cohérence du graphe
+-----------------------
+  OK    T-05  toute personne citée dans une union existe
+  OK    T-06  aucune personne n'a deux couples de parents
+  OK    T-07  personne n'est son propre parent
+  OK    T-08  aucun cycle dans la filiation
+  OK    T-09  les racines désignent des unions existantes
+  OK    T-10  au moins une racine est déclarée
+  OK    T-11  les nœuds détachés existent
+
+A3. Qualité des faits
+---------------------
+  OK    T-12  tout niveau de certitude est dans la liste permise
+  OK    T-13  toute personne porte au moins une source
+  OK    T-14  les points à vérifier visent des personnes existantes
+
+A4. Table cartographique
+------------------------
+  SAUTE table cartographique — aucune table meta.carte déclarée
+
+B1. Le générateur s'exécute
+---------------------------
+  OK    T-17  src/generer_arbre.py est présent
+  OK    T-18  le générateur sort sans erreur
+  NOTE  généré en 0.1 s
+  OK    T-19  le générateur ne supprime aucun fichier étranger
+
+B2. Les fichiers produits
+-------------------------
+  OK    T-20  l'arbre est produit
+  OK    T-21  l'arbre n'est pas vide
+  OK    T-22  le gabarit est entièrement rempli
+  OK    T-23  chaque personne a sa page
+
+B3. Les liens internes
+----------------------
+  OK    T-24  aucun lien entre pages ne pointe dans le vide
+  OK    T-25  l'arbre pointe vers le bon dossier de fiches
+
+C. Version partageable
+----------------------
+  OK    T-26  la version partageable se génère
+  OK    T-27  AUCUN contenu confidentiel dans la version partageable
+
+D. Comportement réel dans un navigateur
+---------------------------------------
+  SAUTE couche navigateur — Playwright absent — voir docs/avant/02-environnement.md
+
+==============================================================
+  JEU DE DONNÉES — exemple_formes.json
+==============================================================
+
+A1. Le fichier de données
+-------------------------
+  OK    T-01  le fichier se lit
+  OK    T-03  le JSON est bien formé
+  OK    T-35  la clé « personnes » existe
+  OK    T-36  la clé « unions » existe
+
+A2. Cohérence du graphe
+-----------------------
+  OK    T-05  toute personne citée dans une union existe
+  OK    T-06  aucune personne n'a deux couples de parents
+  OK    T-07  personne n'est son propre parent
+  OK    T-08  aucun cycle dans la filiation
+  OK    T-09  les racines désignent des unions existantes
+  OK    T-10  au moins une racine est déclarée
+  OK    T-11  les nœuds détachés existent
+
+A3. Qualité des faits
+---------------------
+  OK    T-12  tout niveau de certitude est dans la liste permise
+  OK    T-13  toute personne porte au moins une source
+  OK    T-14  les points à vérifier visent des personnes existantes
+
+A4. Table cartographique
+------------------------
+  OK    T-15  tout lieu employé figure dans la table
+  NOTE  2 entrée(s) volontairement sans lien : Lieu Trop Vague, Nulle-Part
+
+B1. Le générateur s'exécute
+---------------------------
+  OK    T-17  src/generer_arbre.py est présent
+  OK    T-18  le générateur sort sans erreur
+  NOTE  généré en 0.3 s
+  OK    T-19  le générateur ne supprime aucun fichier étranger
+
+B2. Les fichiers produits
+-------------------------
+  OK    T-20  l'arbre est produit
+  OK    T-21  l'arbre n'est pas vide
+  OK    T-22  le gabarit est entièrement rempli
+  OK    T-23  chaque personne a sa page
+
+B3. Les liens internes
+----------------------
+  OK    T-24  aucun lien entre pages ne pointe dans le vide
+  OK    T-25  l'arbre pointe vers le bon dossier de fiches
+
+C. Version partageable
+----------------------
+  OK    T-26  la version partageable se génère
+  OK    T-27  AUCUN contenu confidentiel dans la version partageable
+
+D. Comportement réel dans un navigateur
+---------------------------------------
+  SAUTE couche navigateur — Playwright absent — voir docs/avant/02-environnement.md
+
+==============================================================
+  TOTAL — 51 réussis · 0 échoués · 3 sautés
+  sur 2 jeu(x) de données
+==============================================================
+
+Tout est au vert.
