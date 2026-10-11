@@ -20,6 +20,7 @@ qu'il n'est pas à zéro.
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -434,12 +435,21 @@ def une_passe(chemin, sans_nav):
     if not chemin.exists():
         print(f"\nERREUR : fichier introuvable -> {chemin}")
         return False
-    d = controler_donnees(chemin)
+
+    # Le générateur écrit à côté de son fichier de données. On travaille donc
+    # sur une copie, dans un dossier de sortie dédié : les jeux d'exemple
+    # restent propres, et chaque passe repart d'un emplacement à elle.
+    atelier = RACINE / "tests" / "_sorties" / chemin.stem
+    atelier.mkdir(parents=True, exist_ok=True)
+    copie = atelier / chemin.name
+    shutil.copy2(chemin, copie)
+
+    d = controler_donnees(copie)
     if d is None:
         print("\nLes données ne tiennent pas : le reste n'a pas été contrôlé.")
         return False
-    sortie = controler_generation(chemin, d)
-    controler_confidentialite(chemin, d)
+    sortie = controler_generation(copie, d)
+    controler_confidentialite(copie, d)
     if sortie and not sans_nav:
         controler_navigateur(sortie, d)
     elif sans_nav:
