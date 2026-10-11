@@ -46,6 +46,21 @@ Le générateur fonctionne avec la bibliothèque standard de Python seule.
 | `Scans/`, `Scans OCR/` | sources numérisées | **non** |
 | `arbre_*.html`, `*_fiches/` | ce que le programme produit | **non** |
 
+## Sur un poste fraîchement installé
+
+Le dépôt ne contient **pas** `genealogie_jean.json` ni `photos/` : ce sont des
+données, pas du code, et elles restent hors dépôt (H-03). Conséquence à
+connaître avant de s'en étonner :
+
+- `Tester.bat` **fonctionne** : le contrat tourne sur les jeux de
+  `tests/donnees/`, qui voyagent avec le dépôt. C'est tout ce dont la phase 0
+  a besoin.
+- `Generer_Arbre.bat` **échoue** avec `fichier introuvable`, tant que le
+  fichier de données n'a pas été déposé à la racine. Ce n'est pas un défaut.
+
+Pour produire l'arbre réel sur ce poste, copier `genealogie_jean.json` et le
+dossier `photos/` à la racine du projet — séparément du dépôt, par le sas.
+
 ## Les `.bat`
 
 Sébastien ne tape aucune commande. Toute opération récurrente a son `.bat` à la racine, lançable par double-clic ou par glisser-déposer d'un fichier de données.

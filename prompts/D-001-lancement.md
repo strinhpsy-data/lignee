@@ -47,6 +47,11 @@ Ne t'acharne pas. Trois tentatives, c'est la limite, et la déclarer n'est pas u
 
 **Les données réelles ne sont pas dans le dépôt.** `genealogie_jean.json` et `photos/` sont au `.gitignore` : ils existent sur le disque mais ne sont pas versionnés, et c'est voulu. Les contrôles tournent sur `tests/donnees/`. Ne cherche pas à les versionner.
 
+**`Generer_Arbre.bat` échouera au premier essai**, avec `fichier introuvable`.
+C'est normal : les données réelles ne sont pas dans le dépôt. La phase 0 n'en a
+pas besoin — `Tester.bat` tourne sur `tests/donnees/`. Ne cherche pas à
+reconstituer le fichier manquant, et surtout n'en invente pas le contenu.
+
 **Deux pièges déjà rencontrés sur cette chaîne**, documentés dans `02-environnement.md` : la suppression de fichier est refusée sur les dossiers connectés ; et un HTML bien formé peut avoir un JavaScript mort, que seul un **vrai** clic détecte.
 
 ## Fin de séance
