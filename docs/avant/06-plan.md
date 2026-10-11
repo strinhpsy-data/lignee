@@ -4,6 +4,23 @@ Une phase est terminée quand **tous ses tests passent sur Wilfred**, pas quand 
 
 ---
 
+## Comment Claude et Qwen se partagent une phase
+
+L'empreinte de `tests/` interdit à Qwen de toucher au contrat. Ce n'est pas une
+méfiance : c'est ce qui donne au projet sa méthode, et elle vaut d'être nommée.
+
+1. **Claude pose les contrôles** d'une étape, avant qu'une ligne de code existe.
+   Ils échouent — c'est normal, c'est même la preuve qu'ils mesurent quelque chose.
+2. Claude rescelle l'empreinte et transmet le dépôt.
+3. **Qwen rend les contrôles verts** sans pouvoir les modifier.
+4. Un contrôle qui semble faux donne une `Q-xx`, jamais une retouche.
+
+Le test précède donc le code **par construction**, et non par discipline. C'est
+l'inverse de ce qui s'est passé à la séance 1, où un test écrit après coup est
+passé au vert sur un arbre dont les médaillons ne répondaient plus au clic.
+
+---
+
 ## Phase 0 — Mise sous protocole
 
 **Ce qui est livré.** Le programme d'aujourd'hui, inchangé, mais sous harnais : dépôt git vivant, journal ouvert, contrat scellé, environnement constaté.
@@ -23,11 +40,105 @@ Une phase est terminée quand **tous ses tests passent sur Wilfred**, pas quand 
 
 **Interdit propre à cette phase.** Aucune amélioration, même évidente. Un défaut d'apparence repéré, une fonction qui manque, une ligne qu'on écrirait autrement : tout cela va dans `docs/apres/11-questions.md` sous un `Q-xx`. On ne mélange jamais une migration et une amélioration — quand quelque chose casse, on ne sait plus laquelle des deux en est la cause.
 
+**Prérequis non rempli à ce jour :** Git n'est pas installé sur Wilfred. Sans lui,
+Qwen peut travailler mais ne laisse aucune trace exploitable. C'est le premier
+`B-xx` à déclarer si rien n'a changé.
+
 ---
 
-## Phase 1 — Les générations manquantes
+## Phase 1 — L'arbre de Samuel
 
-**À cadrer avec Claude avant d'être lancée.** Le livre source descend jusqu'à la 10ᵉ génération ; l'extrait transcrit s'arrête à la 3ᵉ. Il manque le chaînon entre Pierre Jean et Michel Pierre Jean.
+**Cadrée le 2026-10-11** à partir de la demande `D-002`. Aucune étape ne commence
+avant que la phase 0 soit verte sur Wilfred.
+
+**Ce qui est livré.** L'arbre s'ouvre centré sur Samuel, se lit vers le haut
+comme vers le bas, et sait à quelle branche chaque personne appartient.
+
+**Le constat qui fixe le travail.** Douze endroits du code parcourent les
+enfants ; **aucun** ne parcourt les parents. En revanche, l'index inverse existe
+déjà — `unionParente` côté navigateur, `union_parente` côté Python. Le lien de
+filiation est donc déjà là dans les deux sens ; ce qui manque, c'est de le
+parcourir.
+
+### Étape 1.1 — Le pivot
+
+`meta.pivot` désigne une personne. L'arbre s'ouvre cadré sur elle. Rien d'autre
+ne change : aucun nouveau parcours, aucune nouvelle vue.
+
+C'est volontairement la plus petite modification de comportement possible. Elle
+sert à éprouver la boucle sur un vrai changement, pas à livrer une fonction.
+
+*Candidats de tests :* le champ absent laisse le comportement actuel ; le champ
+désignant une personne inexistante **arrête la génération** avec un code non nul ;
+le champ valide déplace le cadrage d'ouverture.
+
+### Étape 1.2 — Monter
+
+Un parcours vers le haut, miroir de `construire`, qui prend les conjoints de
+`unionParente[id]` là où l'autre prend les enfants.
+
+**Le point délicat est l'ensemble `vu`.** Il faut un ensemble **par direction** :
+une personne atteinte en montant ne doit pas empêcher de la dessiner en
+descendant. Avec un seul ensemble, le lien disparaît sans erreur, sans message,
+et le dessin paraît correct.
+
+*Candidats de tests :* l'ascendance d'une personne à deux parents connus dessine
+les deux ; un parent inconnu ne laisse pas de nœud vide ; une personne atteignable
+dans les deux sens — mariage entre cousins, fréquent en Nouvelle-France — est
+dessinée dans les deux.
+
+### Étape 1.3 — Le sablier
+
+Les deux moitiés autour du pivot, le pivot dessiné **une seule fois**.
+
+**Le piège est la moitié basse vide.** Samuel n'a pas de descendance : un sablier
+naïf réserve l'espace quand même et ouvre l'arbre sur un grand blanc. La
+disposition doit s'affaisser — Samuel se retrouve alors au pied de l'arbre, et le
+sablier n'apparaît visuellement que le jour où il aura des enfants.
+
+*Candidats de tests :* un pivot sans descendance ne produit **aucun espace vide**
+sous lui ; le pivot n'est dessiné qu'une fois ; un pivot avec descendance produit
+les deux moitiés.
+
+### Étape 1.4 — Les branches
+
+`meta.branches`, la vérification que chaque tête est un grand-parent du pivot, et
+le calcul d'appartenance décrit dans `07-branches-export.md`.
+
+Cette étape consomme `ancetre` (H-20) : il perd son rôle de cadrage, déjà reporté
+sur le pivot à l'étape 1.1, et devient une étiquette par branche. **Attention** :
+le placement des nœuds détachés s'ancre aujourd'hui sur l'ancêtre et aura besoin
+d'un autre point d'appui.
+
+*Candidats de tests :* voir `07-branches-export.md`, section 8.
+
+### Étape 1.5 — La galerie
+
+Plusieurs portraits par personne (H-17), là où il n'y en a qu'un aujourd'hui. Le
+médaillon en montre un ; la page complète les montre tous.
+
+*Candidats de tests :* une personne sans portrait garde exactement le même cadre
+et la même taille qu'une personne qui en a plusieurs — l'arbre ne doit jamais
+avoir l'air à moitié fait ; un fichier de portrait absent ne fait pas échouer la
+génération.
+
+---
+
+## Phase 2 — L'export de branche
+
+**À ouvrir quand la phase 1 est verte.** Spécification complète dans
+`07-branches-export.md`.
+
+Séparée de la phase 1 pour une raison précise : c'est la seule partie du projet
+où un défaut **sort de la maison**. Un arbre mal dessiné se corrige ; un fichier
+envoyé à douze parents ne se rappelle pas. Elle mérite sa propre phase, ses
+propres tests et sa propre relecture.
+
+---
+
+## Phase 3 — Les générations manquantes
+
+**À cadrer avec Claude.** Le livre source descend jusqu'à la 10ᵉ génération ; l'extrait transcrit s'arrête à la 3ᵉ. Il manque le chaînon entre Pierre Jean et Michel Pierre Jean.
 
 Ce qui relève du code : accueillir un arbre nettement plus grand sans que la disposition devienne illisible, et sans que la génération s'éternise.
 
@@ -37,7 +148,7 @@ Ce qui n'en relève pas : la transcription elle-même. Elle reste éditoriale.
 
 ---
 
-## Phase 2 — Reprise des scans
+## Phase 4 — Reprise des scans
 
 **À cadrer.** Le dossier `Scans` contient le PDF d'origine et `Scans OCR` est vide. Une chaîne de reprise produirait du texte exploitable à partir des pages numérisées.
 
@@ -45,7 +156,7 @@ Attention : trois pages du PDF d'origine étaient numérisées à l'envers. Une 
 
 ---
 
-## Phase 3 — Impression
+## Phase 5 — Impression
 
 **À cadrer.** Une planche grand format, et une fiche imprimable par personne.
 
@@ -54,3 +165,7 @@ Attention : trois pages du PDF d'origine étaient numérisées à l'envers. Une 
 ## Règle commune à toutes les phases
 
 Aucune phase ne commence avant que la précédente soit verte **sur Wilfred**. On ne construit pas sur un étage qui n'a pas été reçu.
+
+Et à l'intérieur d'une phase, aucune étape ne commence avant que la précédente
+soit verte. Les étapes de la phase 1 sont ordonnées : le cadrage avant le
+parcours, le parcours avant le sablier, le sablier avant les branches.

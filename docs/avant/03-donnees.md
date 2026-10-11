@@ -6,7 +6,10 @@ Un seul fichier d'entrée, en JSON, encodé en UTF-8. C'est la source unique : t
 
 ```json
 {
-  "meta":      { "titre": "…", "sous_titre": "…", "carte": { … } },
+  "meta":      { "titre": "…", "sous_titre": "…",
+                 "pivot": "identifiant-de-personne",
+                 "branches": [ … ],
+                 "carte": { … } },
   "problemes": [ … ],
   "personnes": { "identifiant": { … } },
   "unions":    [ … ],
@@ -35,6 +38,7 @@ Les identifiants sont des chaînes libres, en minuscules, sans accent ni espace 
   "marquants": ["…"],
   "notes":     ["…"],
   "sections":  [ … ],
+  "galerie":   [ { "fichier": "pierre-jean-1645-2.jpg", "legende": "…" } ],
   "sources":   ["Michel Jean, p. 7"]
 }
 ```
@@ -43,11 +47,12 @@ Les identifiants sont des chaînes libres, en minuscules, sans accent ni espace 
 |---|---|
 | `pays` | `"fr"` resté en France, `"nf"` passé en Nouvelle-France. Détermine la couleur de l'anneau. |
 | `lignee` | sur la chaîne d'ascendance directe. Anneau or, et cible du filtre « Lignée directe ». |
-| `ancetre` | l'ancêtre canadien. Un seul par arbre. Sert de point de cadrage à l'ouverture. |
+| `ancetre` | l'ancêtre fondateur d'une branche. **Étiquette descriptive seulement.** Depuis doc-v2, le cadrage d'ouverture appartient au pivot (H-20), et il y a autant d'ancêtres fondateurs que de branches. |
 | `lacune` | renvoie à un `problemes[].id` : le rattachement de cette personne n'est pas documenté. Affichée détachée, en pointillé. |
 | `marquants` | lignes courtes et narratives affichées sur la carte flottante. Trois ou quatre au plus. |
 | `notes` | remarques n'appartenant à aucune rubrique. |
 | `sources` | **obligatoire** : le contrôle `T-13` le vérifie. |
+| `galerie` | portraits supplémentaires, **facultatif** (H-17). Voir « La galerie » plus bas. |
 
 ### Les faits datés
 
@@ -139,6 +144,60 @@ Champs communs : `titre`, `intro`, `source`, `ouvert`, et `prive`.
 `lieux` : correspondance exacte pour la rubrique Lieux. `toponymes` : noms reconnus à l'intérieur des textes libres, les plus longs essayés d'abord, une seule occurrence par bloc.
 
 **Une valeur vide désactive le lien.** La requête ne part jamais du texte brut : il contient des dates entre parenthèses, et « Champlain », « Gentilly » ou « Beauport » existent des deux côtés de l'Atlantique.
+
+## Le pivot et les branches
+
+Ajoutés par doc-v2. Ils répondent aux points 1 et 3 de la demande `D-002`.
+
+```json
+"meta": {
+  "pivot": "samuel-trinh",
+  "branches": [
+    { "id": "jean",   "tete": "fernande-jean",  "titre": "Famille Jean",
+      "retour": "Fernande Jean" },
+    { "id": "trinh",  "tete": "hieu-duc-trinh", "titre": "Famille Trinh",
+      "retour": "l'oncle de Sébastien" },
+    { "id": "dionne", "tete": "justine-dionne", "titre": "Famille Dionne" },
+    { "id": "gagne",  "tete": "richard-gagne",  "titre": "Famille Gagné" }
+  ]
+}
+```
+
+`pivot` est la personne sur laquelle l'arbre s'ouvre, et le point de rencontre
+des deux sens de lecture. **C'est un champ déclaré, jamais déduit** (H-19) : une
+règle du genre « la personne la plus jeune » déplacerait le centre de l'arbre
+toute seule le jour d'une naissance, sans que personne l'ait demandé.
+
+`branches` déclare les quatre têtes. Chacune doit être un **grand-parent du
+pivot**, et cela se vérifie à la génération : une déclaration non contrôlée est
+une donnée comme une autre. `retour` est facultatif — sans lui, pas de page
+d'invitation.
+
+**L'appartenance à une branche ne s'écrit jamais sur une personne** (H-13). Elle
+se calcule, à chaque génération, selon les trois règles de parcours de
+`07-branches-export.md`. Un champ `"branche"` posé à la main se tairait le jour
+où une filiation est corrigée — et il y en aura, le fichier contient déjà huit
+contradictions de source.
+
+**Un seul fichier pour les quatre branches** (H-22). Les exports sont des
+sorties ; rien ne se ressaisit depuis un fichier exporté.
+
+## La galerie
+
+Un portrait principal : `photos/<identifiant>.jpg`, comme aujourd'hui. C'est lui
+qui s'affiche sur le médaillon.
+
+Les portraits supplémentaires suivent la même convention de nom, numérotés :
+`photos/<identifiant>-2.jpg`, `-3.jpg`, et ainsi de suite. Ils sont **découverts
+automatiquement** ; rien à déclarer. C'est voulu : un parent qui envoie trois
+photos n'a pas à éditer un fichier JSON, et les identifiants, eux, ne changent
+jamais.
+
+Le champ `galerie` ne sert qu'à **légender** une photo, ou à en forcer l'ordre.
+Une photo sans légende n'a pas besoin d'y figurer.
+
+Un fichier déclaré mais absent ne fait pas échouer la génération : il est
+signalé, comme une fiche orpheline.
 
 ## Jeux d'exemple
 

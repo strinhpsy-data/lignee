@@ -1,6 +1,8 @@
 # 04 — Parcours et états
 
-Deux produits : l'arbre, fichier unique, et une page par personne. Le lien « En savoir plus » mène de l'un à l'autre.
+Trois produits : l'arbre, fichier unique ; une page par personne ; et, à partir
+de la phase 2, un export par branche. Le lien « En savoir plus » mène du premier
+au deuxième.
 
 ---
 
@@ -8,11 +10,15 @@ Deux produits : l'arbre, fichier unique, et une page par personne. Le lien « En
 
 ### A1 — Ouverture
 
-L'arbre s'ouvre cadré sur l'ancêtre, à une échelle lisible, et non ajusté à l'écran : à 60 personnes, un ajustement global rend les noms illisibles.
+L'arbre s'ouvre cadré sur **le pivot** — Samuel —, à une échelle lisible, et non ajusté à l'écran : à 60 personnes, un ajustement global rend les noms illisibles. À quatre branches, il le rendrait absurde.
+
+Jusqu'à doc-v1, le cadrage se faisait sur l'ancêtre canadien. Il appartient désormais au pivot (H-19, H-20) : « Samuel reste centré à chaque ouverture de l'arbre » (`D-002.6`).
 
 | État | Comportement attendu |
 |---|---|
-| normal | médaillons dessinés, lignée directe en or, vue centrée sur l'ancêtre |
+| normal | médaillons dessinés, lignée directe en or, **vue centrée sur le pivot** |
+| pivot absent du fichier | comportement de doc-v1 : cadrage sur l'ancêtre. Aucune erreur. |
+| pivot désignant un inconnu | **la génération s'arrête**, code non nul, identifiant fautif nommé |
 | données vides | aucune personne : la page s'ouvre sans erreur JavaScript et n'affiche rien d'autre que la barre du haut |
 | erreur | aucune : les données sont validées à la génération, pas au chargement |
 
@@ -71,6 +77,24 @@ Structure : bandeau de retour vers l'arbre ; portrait, nom, dates, étiquettes ;
 
 **Les relations sont des liens entre pages.** Parents, fratrie, conjoints, enfants mènent chacun à leur propre page. Le contrôle `T-24` vérifie qu'aucun ne pointe dans le vide.
 
+### A5 — Le sablier
+
+Phase 1, étape 1.3. L'ascendance monte au-dessus du pivot, la descendance descend
+en dessous, et le pivot est dessiné **une seule fois**, à la taille.
+
+| État | Comportement attendu |
+|---|---|
+| pivot sans descendance | **aucun espace vide sous lui** : la disposition s'affaisse et le pivot se retrouve au pied de l'arbre |
+| pivot avec descendance | les deux moitiés, le pivot au centre |
+| personne atteignable dans les deux sens | dessinée dans les deux ; un ensemble `vu` **par direction** |
+| parent inconnu | aucun nœud vide, aucune case en attente |
+
+Le troisième cas est celui qui casse silencieusement. Avec un seul ensemble `vu`,
+une personne atteinte en montant n'est plus dessinée en descendant : le lien
+disparaît sans erreur, sans message, et le dessin paraît correct. C'est le même
+genre de défaut que le clic mort de la séance 1 — invisible à la relecture,
+visible seulement à l'épreuve.
+
 ---
 
 ## C. La génération
@@ -84,3 +108,28 @@ Structure : bandeau de retour vers l'arbre ; portrait, nom, dates, étiquettes ;
 | confidentiel présent | avertissement explicite en fin de génération |
 
 Contrôles : `T-17` (sortie sans erreur), `T-19` (aucune suppression), `T-02` et `T-03` (lecture et forme du JSON).
+
+---
+
+## D. L'export d'une branche
+
+Phase 2. Spécification complète dans `07-branches-export.md` ; ici, seulement ce
+que l'utilisateur voit.
+
+Un `.bat` par branche, ou un `.bat` qui demande laquelle — à trancher à
+l'ouverture de la phase 2. Dans les deux cas Sébastien ne tape aucune commande.
+
+| État | Comportement attendu |
+|---|---|
+| succès | un dossier par branche, nommé sans ambiguïté, avec son arbre, ses fiches et sa page d'invitation |
+| tête de branche absente des données | **arrêt**, code non nul, branche nommée |
+| tête qui n'est pas un grand-parent du pivot | **arrêt**, code non nul |
+| branche sans `retour` | export produit, **sans** page d'invitation |
+| section `prive` présente | retirée physiquement, et la génération le dit en clair |
+
+**Ce que l'utilisateur doit pouvoir vérifier d'un coup d'œil avant d'envoyer :**
+le nom de la branche, le nombre de personnes, le nombre de nœuds de frontière, et
+une ligne explicite confirmant qu'aucune section confidentielle ne subsiste. Un
+export se relit avant de partir, et il ne se rappelle pas.
+
+Le programme n'envoie rien.

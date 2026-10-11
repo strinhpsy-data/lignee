@@ -1,28 +1,48 @@
 # 01 — Fiche projet
 
-**Arbre généalogique Jean** · protocole v1.0 · mode **économe** · doc-v1
+**Arbre généalogique de Samuel** · protocole v1.0 · mode **économe** · doc-v2
+
+> doc-v1 décrivait l'arbre de la famille Jean. La demande `D-002` l'élargit :
+> l'arbre devient celui de Samuel, et la famille Jean en devient une des quatre
+> branches. Le programme de la phase 0 reste inchangé ; c'est la phase 1 qui
+> porte cet élargissement.
 
 ## Admission
 
 - [x] **Aucune donnée clinique de client.** Ce projet n'en contient pas et n'en contiendra pas.
 
+Le point 5 de `D-002` fait entrer des informations de santé **de parents**, versées
+par eux-mêmes et de leur plein gré. Ce n'est pas du matériel clinique et cela ne
+relève pas du dossier professionnel. Deux règles le couvrent : une section
+`"prive": true` est **physiquement retirée** de tout fichier qui sort, et tout
+export de branche est une version partageable (H-21). Rien d'autre n'est à
+inventer là-dessus.
+
 ## Interdits
 
-Ces cinq règles priment sur toute demande ponctuelle. En cas de doute entre un interdit et une consigne, l'interdit gagne et vous inscrivez une question `Q-xx`.
+Ces six règles priment sur toute demande ponctuelle. En cas de doute entre un interdit et une consigne, l'interdit gagne et vous inscrivez une question `Q-xx`.
 
 1. **Ne jamais inventer une donnée généalogique.** Aucune date, aucun lieu, aucun lien de filiation ne s'ajoute sans figurer dans une source citée. Un trou reste un trou, marqué comme tel. C'est l'interdit le plus important du projet : une généalogie se corrompt par les certitudes empruntées, et une donnée plausible mais fausse est indétectable dix ans plus tard.
 2. **Ne jamais supprimer de fichier.** Ni données, ni fiches devenues orphelines, ni sorties. On signale, l'utilisateur décide.
 3. **Ne jamais modifier `tests/`.** Un test qui vous semble faux appelle une `Q-xx`, pas une retouche.
 4. **Aucun accès réseau** depuis le générateur ni depuis les pages produites. Tout doit fonctionner sur un poste hors ligne, et les fichiers produits doivent s'ouvrir sans connexion.
 5. **Ne jamais se déclarer terminé sans tests verts.** `Tester.bat` fait foi, pas l'impression que le code est correct.
+6. **Ne jamais faire entrer les données d'une branche dans l'export d'une autre.** Et ne jamais traiter cela par un filtre appliqué après coup : la règle de parcours de `07-branches-export.md` l'interdit par construction, parce qu'un filtre s'oublie et qu'un parcours, non.
 
 ## But, en une phrase
 
-Transformer un fichier de données généalogiques en un arbre HTML autonome, consultable hors ligne, avec une fiche descriptive par personne — et rester extensible pendant des années, au fil des trouvailles d'archives.
+Transformer un fichier de données généalogiques en l'arbre de Samuel — quatre
+branches familiales autour de lui, en HTML autonome, consultable hors ligne, avec
+une fiche descriptive par personne — et pouvoir en détacher une branche à envoyer
+à la parenté.
 
 ## Utilisateur et contexte
 
-Un seul utilisateur : Sébastien Trinh. Usage personnel et familial, sur Windows, par double-clic. Il ne tape aucune commande. Le produit sera montré à de la parenté et possiblement transmis ; il doit donc fonctionner sur une machine quelconque, sans installation.
+Un seul utilisateur : Sébastien Trinh. Usage personnel et familial, sur Windows, par double-clic. Il ne tape aucune commande.
+
+Les exports de branche, eux, sont **destinés à des tiers** : oncles, tantes,
+cousins. Ils doivent s'ouvrir sur une machine quelconque, sans installation, sans
+connexion, et se comprendre sans explication orale.
 
 ## Ce que le programme fait aujourd'hui
 
@@ -31,10 +51,17 @@ Un seul utilisateur : Sébastien Trinh. Usage personnel et familial, sur Windows
 - Produit `arbre_jean.html`, fichier unique et autonome : deux vues (Portraits en médaillons, Cartes en rectangles), zoom, déplacement, recherche, surlignage de la lignée directe, thème clair/sombre.
 - Produit une page complète par personne dans `arbre_jean_fiches/`, reliées entre elles.
 - Produit sur demande une version partageable d'où les sections confidentielles sont **physiquement retirées**.
+- **Ne parcourt l'arbre que vers le bas.** Douze endroits du code parcourent les enfants ; aucun ne parcourt les parents. C'est le constat qui fixe le travail de la phase 1.
 
 ## Inclus dans la phase 0
 
 La mise sous protocole, **sans modifier un seul comportement**. Structure du dépôt, dépôt git, contrat de vérification codé `T-xx`, empreinte, journal. À la fin de la phase 0, le programme produit exactement les mêmes fichiers qu'avant.
+
+## Inclus dans la phase 1
+
+Le pivot, le sablier, les quatre branches, l'export de branche, la galerie de
+portraits. Le détail est dans `06-plan.md`, le modèle de données dans
+`03-donnees.md`, les branches dans `07-branches-export.md`.
 
 ## Exclus de la phase 0
 
@@ -42,10 +69,13 @@ Toute amélioration, toute correction d'apparence, toute nouvelle fonction. Elle
 
 ## Exclus du projet entier
 
-- Le travail éditorial : transcrire le livre, trancher les incohérences, décider ce qui entre dans l'arbre. Cela reste à Sébastien et à Claude.
+- Le travail éditorial : transcrire le livre, trancher les incohérences, décider ce qui entre dans l'arbre. Cela reste à Sébastien et à Claude. **La saisie des branches Trinh, Dionne et Gagné en fait partie** : la phase 1 fournit la structure qui les accueille, elle ne remplit rien.
 - Toute forme de publication en ligne.
+- L'envoi des exports. Le programme produit des fichiers ; la transmission est manuelle.
 
 ## Hypothèses validées au cadrage
+
+### doc-v1 — phase 0
 
 | | |
 |---|---|
@@ -59,3 +89,20 @@ Toute amélioration, toute correction d'apparence, toute nouvelle fonction. Elle
 | **H-08** | Le prompt de lancement est `D-001` ; la numérotation repart de zéro. |
 | **H-09** | Qwen travaille sur Wilfred ; dellg5 n'est qu'un point d'échange. Seul Wilfred fait foi. |
 | **H-10** | Aucune dépendance au-delà de Python et de Pillow (facultatif). |
+
+### doc-v2 — phase 1
+
+| | |
+|---|---|
+| **H-11** | **Corrigée.** Le pivot s'ajoute à `meta` ; **aucun champ existant ne change de forme**. Vérifié dans le code : l'index inverse `unionParente` est déjà construit côté navigateur, et `union_parente` existe déjà côté Python pour les pages de personne. La migration est additive, et non la rupture de format annoncée au premier cadrage. |
+| **H-12** | **Corrigée.** Un seul moteur de parcours, **paramétré par une direction**. Le sablier et l'export de branche en sont deux usages, pas deux moteurs. |
+| **H-13** | La branche est **calculée** à chaque génération, jamais stockée sur la personne. |
+| **H-14** | **Retirée.** Les niveaux de diffusion sont écartés par `D-002.4` : un parent met ce qu'il veut, il peut ne rien mettre. Le `"prive": true` existant suffit. |
+| **H-15** | Les quatre têtes de branche sont les grands-parents du pivot. **Déclarées** dans `meta.branches`, **vérifiées** à la génération. |
+| **H-16** | Le modèle accueille dès maintenant la conjointe et les enfants futurs de Samuel, même s'ils ne sont pas encore dessinés. |
+| **H-17** | Une galerie de portraits par personne remplace le portrait unique. |
+| **H-18** | Saisie manuelle. Aucun formulaire, aucune fusion automatique de contributions en phase 1. |
+| **H-19** | Le pivot est un champ déclaré, `meta.pivot`, **jamais déduit**. Une règle du genre « la personne la plus jeune » déplacerait le centre de l'arbre tout seul le jour d'une naissance. |
+| **H-20** | `ancetre` **perd son rôle de cadrage** et devient une étiquette par branche, purement descriptive. Conséquence dans le code : le placement des nœuds détachés, qui s'ancre aujourd'hui sur l'ancêtre, a besoin d'un autre point d'appui. |
+| **H-21** | Tout export de branche est une version partageable. **Il n'existe pas d'export complet**, et aucune option ne permet de le contourner. |
+| **H-22** | Un seul fichier de données pour les quatre branches. Les exports sont des **sorties**, jamais des entrées : rien ne se ressaisit depuis un fichier exporté. |

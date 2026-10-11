@@ -1,4 +1,10 @@
-# Arbre généalogique Jean
+# Arbre généalogique de Samuel — branche Jean
+
+> Depuis le cadrage de la phase 1 (`doc-v2`), le projet est l'arbre de
+> **Samuel**, autour de qui s'articulent quatre branches : Jean, Trinh,
+> Dionne et Gagné. Le fichier de données actuel ne contient que la branche
+> Jean ; les trois autres restent à saisir, et c'est un travail de
+> transcription, pas de programmation.
 
 > **Ce projet est mené sous le protocole de programmation conjointe v1.0.**
 > La documentation de référence est dans `docs/avant/`. Ce LISEZMOI est le
@@ -13,6 +19,7 @@
 > | les écrans et leurs états | `docs/avant/04-parcours.md` |
 > | l'apparence | `docs/avant/05-apparence.md` |
 > | le plan par phases | `docs/avant/06-plan.md` |
+> | les branches et l'envoi à la parenté | `docs/avant/07-branches-export.md` |
 > | où en est le travail | `docs/apres/09-etat.md` |
 
 
@@ -233,6 +240,24 @@ Si le `.bat` signale une erreur de syntaxe, il indique la ligne et la colonne fa
 60 personnes, 16 unions, 3 générations complètes, 8 points à vérifier, aucun portrait pour l'instant. Une seule fiche est étoffée : celle de Pierre Jean, dont le parcours a été remonté en chronologie de 17 entrées à partir des pages 7 et 10 — sans qu'aucun événement soit ajouté.
 
 **Ce qui manque et qui bloque la suite :** les générations 4 et 5, c'est-à-dire le chaînon entre Pierre Jean (baptisé à La Rochelle en 1645) et Michel Pierre Jean, colon-défricheur de St-Mathieu, à qui le livre est consacré. L'extrait fourni s'arrête avant. Le livre complet fait au moins 247 pages et descend jusqu'à la 10ᵉ génération.
+
+## Ce qui change en phase 1
+
+Cadré le 2026-10-11, pas encore codé. Quatre choses, dans cet ordre :
+
+1. **L'arbre s'ouvrira centré sur Samuel**, et non plus sur l'ancêtre canadien.
+2. **Il se lira dans les deux sens** — l'ascendance au-dessus, la descendance
+   en dessous. Aujourd'hui il ne descend que vers le bas.
+3. **Chaque personne saura à quelle branche elle appartient**, par calcul et
+   non par étiquette posée à la main.
+4. **Une branche pourra être détachée** en un dossier autonome à remettre à
+   la parenté. Les sections confidentielles en sont retirées physiquement, et
+   il n'existe aucune façon de produire un export qui les contienne.
+
+Une personne d'une autre famille — un conjoint — apparaît dans l'export
+**par son nom seulement** : pas de dates, pas de page, et ses propres parents
+ne sont jamais atteints. C'est pourquoi l'export Jean ne peut pas contenir de
+données Trinh : elles n'y entrent jamais, plutôt que d'en être retirées.
 
 ## Source
 
