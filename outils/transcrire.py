@@ -232,16 +232,28 @@ def assembler(lignes):
     return out
 
 
-def analyser_page(numero):
+def analyser_page(numero, etat=None):
+    """`etat` porte la pile des « N enfants: » encore ouverts, le couple en
+    cours et la génération, d'une page à la suivante.
+
+    Sans ce report, une fratrie de 16 annoncée en bas de la page 133 et
+    continuée page 134 produit deux arbres au lieu d'un : la page 134
+    recommence sans parent, et le livre se fragmente en autant de morceaux
+    qu'il a de pages. C'est la source elle-même qui donne la couture, dans
+    le compte qu'elle a écrit."""
     chemin = SOURCE / f"p{numero:03d}.txt"
     if not chemin.exists():
-        return None
+        return None, etat
     brut = [l for l in chemin.read_text(encoding="utf-8").splitlines()
             if not l.startswith("#")]
 
+    etat = etat or {}
     personnes, residu, annonces = [], [], []
-    generation, couple, courante = None, None, None
-    pile = []
+    generation = etat.get("generation")
+    couple = etat.get("couple")
+    courante = None
+    pile = [dict(n) for n in etat.get("pile", [])]
+    reportes = len(pile)
 
     def depile():
         # Le compte annoncé referme le niveau. Sans ça, la fratrie suivante
@@ -309,9 +321,11 @@ def analyser_page(numero):
     for p in personnes:
         completer_jour_seul(p)
     ecarts = [a for a in annonces if a["lus"] != a["annonce"]]
-    return {"page": numero, "generation": generation, "personnes": personnes,
-            "residu": residu, "comptes_annonces": annonces,
-            "ecarts_de_compte": ecarts}
+    suite = {"pile": pile, "couple": couple, "generation": generation}
+    return ({"page": numero, "generation": generation, "personnes": personnes,
+             "residu": residu, "comptes_annonces": annonces,
+             "ecarts_de_compte": ecarts, "niveaux_reportes": reportes,
+             "niveaux_encore_ouverts": len(pile)}, suite)
 
 
 def plage(expr):
@@ -357,8 +371,9 @@ def main():
     pages = plage(args[args.index("--pages") + 1]) if "--pages" in args else \
         [int(f.stem[1:]) for f in sorted(SOURCE.glob("p[0-9][0-9][0-9].txt"))]
     tp = tr = 0
+    etat = None
     for n in pages:
-        r = analyser_page(n)
+        r, etat = analyser_page(n, etat)
         if r is None:
             continue
         (SORTIE / f"p{n:03d}.json").write_text(

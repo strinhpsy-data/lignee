@@ -32,3 +32,6 @@ arbre-genealogique-doc-*.zip
 
 # Transcription : se refabrique en relancant outils/transcrire.py
 transcription/
+
+# Brouillon assemble : se refabrique avec outils/assembler.py
+genealogie_*_brouillon.json

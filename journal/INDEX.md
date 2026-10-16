@@ -13,3 +13,4 @@ il doit suffire à savoir où regarder.
 | `C-006` | 2026-10-11 | Deux fausses alarmes retirées du contrat | aucun ajouté ni retiré — empreinte reposée |
 | `C-007` | 2026-10-16 | Océrisation des deux documents, cadrage de la couverture (doc-v3) | aucun — `tests/` inchangé |
 | `C-008` | 2026-10-16 | Analyseur de transcription : 4 143 personnes lues sur 290 pages | aucun — `tests/` inchangé |
+| `C-009` | 2026-10-16 | Phase 4 : disposition repliable, forêt en colonne, 5 480 personnes | aucun — `tests/` inchangé |

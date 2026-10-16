@@ -134,6 +134,14 @@ header{
 
 /* ---------- médaillons ---------- */
 .puce{cursor:pointer}
+.plier{cursor:pointer}
+.plier rect{fill:var(--surface); stroke:var(--line); stroke-width:1}
+.plier text{font-size:9.6px; font-weight:700; fill:var(--muted);
+  font-variant-numeric:tabular-nums; pointer-events:none}
+.plier.ferme rect{fill:color-mix(in srgb, var(--or) 14%, var(--surface));
+  stroke:var(--or)}
+.plier.ferme text{fill:var(--or)}
+.plier:hover rect{stroke:var(--or); stroke-width:2}
 .anneau{fill:none; stroke-width:3.2; transition:stroke-width .14s}
 .puce.fr .anneau{stroke:var(--fr)}
 .puce.nf .anneau{stroke:var(--nf)}
@@ -305,6 +313,7 @@ header{
     <button class="btn" id="b-pb" aria-pressed="false" title="Divergences et lacunes du document source">Problèmes <span id="n-pb"></span></button>
     <button class="btn rond" id="b-moins" title="Dézoomer">&minus;</button>
     <button class="btn rond" id="b-plus" title="Zoomer">+</button>
+    <button class="btn" id="b-replier" title="Ne garder que les deux premières générations">Replier</button>
     <button class="btn" id="b-reset" title="Tout revoir">Recadrer</button>
     <button class="btn rond" id="b-theme" title="Clair / sombre">◐</button>
   </div>
@@ -360,6 +369,70 @@ const racines = [];
 (D.detaches||[]).forEach(pid=>{ racines.push(construire(pid)); });
 const principal = racines[0];
 const detaches = racines.slice(1);
+
+/* ---------------- dépliage ----------------
+   À 60 personnes on dessinait tout. À 260, la disposition fait 30 000 px de
+   large et aucun zoom ne la rend lisible — c'est le même mur qu'au premier
+   jour, à l'échelle du livre entier.
+
+   Un noeud fermé se comporte exactement comme une feuille : la disposition
+   étant récursive, il suffit de lui cacher ses enfants pour que toute la
+   largeur en aval disparaisse. On ne change donc pas l'algorithme, on change
+   ce qu'il voit. */
+/* Deux générations ouvertes quand il n'y a qu'un arbre.
+
+   Pour une forêt : TOUT REPLIÉ. À 206 familles, ouvrir ne serait-ce qu'un
+   niveau dessine quatre mille médaillons — mesuré — et c'est le même mur
+   qu'avant, déplacé. Entièrement replié, chaque famille se réduit à son
+   couple de tête et à son compte : la page d'ouverture devient l'index des
+   familles, et l'index est le même objet que l'arbre. Un clic ouvre celle
+   qu'on veut. */
+const PROFONDEUR_INITIALE = racines.length > 3 ? 0 : 2;
+
+function preparer(n, prof){
+  n.total = 0;
+  (n.enfants||[]).forEach(e=>{ n.total += 1 + preparer(e, prof+1); });
+  n.prof = prof;
+  n.ouvert = prof < PROFONDEUR_INITIALE;
+  return n.total;
+}
+[principal].concat(detaches).filter(Boolean).forEach(n=>preparer(n,0));
+
+/* Les deux seules portes par lesquelles la disposition et le dessin
+   atteignent la descendance. Tout passe par là, donc rien ne peut oublier
+   l'état d'ouverture. */
+function enf(n){ return n.ouvert ? (n.enfants||[]) : []; }
+function grp(n){ return n.ouvert ? (n.groupes||[]) : []; }
+
+const indexNoeuds = {};
+function recenser(n){ indexNoeuds[n.id]=n; (n.enfants||[]).forEach(recenser); }
+[principal].concat(detaches).filter(Boolean).forEach(recenser);
+
+function basculer(id){
+  const n = indexNoeuds[id];
+  if(!n || !(n.enfants||[]).length) return;
+  n.ouvert = !n.ouvert;
+  rendre(true);
+}
+
+/* Ouvre tout le chemin de la racine jusqu'à une personne. Sans cela, la
+   recherche ne trouve rien de ce qui est replié, et l'utilisateur conclut
+   que la personne n'est pas dans l'arbre. */
+function ouvrirChemin(id){
+  let n = indexNoeuds[id];
+  if(!n) return false;
+  const chemin = [];
+  while(n){ chemin.push(n); n = n.parent; }
+  chemin.forEach(x=>{ if((x.enfants||[]).length) x.ouvert = true; });
+  return true;
+}
+function poserParents(n){ (n.enfants||[]).forEach(e=>{ e.parent = n; poserParents(e); }); }
+[principal].concat(detaches).filter(Boolean).forEach(poserParents);
+
+function replierTout(){
+  Object.values(indexNoeuds).forEach(n=>{ n.ouvert = n.prof < PROFONDEUR_INITIALE; });
+  rendre(false);
+}
 const ancNode = (function t(n){ if(P[n.id]&&P[n.id].ancetre) return n;
   for(const e of (n.enfants||[])){ const r=t(e); if(r) return r; } return null; })(principal);
 
@@ -377,18 +450,18 @@ function taillePuces(n, pas, ecart){ const k=1+n.conjoints.length; return k*pas 
 /* -- portraits : l'axe principal est horizontal, les générations descendent -- */
 function mesurerV(n){
   const lp = taillePuces(n, MED_L, MED_EP);
-  if(!n.enfants.length){ n.taille = lp; n.tailleEnfants = 0; return n.taille; }
-  let s = 0; n.enfants.forEach((e,i)=>{ s += mesurerV(e); if(i) s += MED_EF; });
+  if(!enf(n).length){ n.taille = lp; n.tailleEnfants = 0; return n.taille; }
+  let s = 0; enf(n).forEach((e,i)=>{ s += mesurerV(e); if(i) s += MED_EF; });
   n.tailleEnfants = s; n.taille = Math.max(lp, s); return n.taille;
 }
 function placerV(n, gauche, y){
   n.y = y;
   const lp = taillePuces(n, MED_L, MED_EP);
-  if(!n.enfants.length){ n.debut = gauche + (n.taille-lp)/2; }
+  if(!enf(n).length){ n.debut = gauche + (n.taille-lp)/2; }
   else{
     let cx = gauche + (n.taille - n.tailleEnfants)/2;
-    n.enfants.forEach((e,i)=>{ if(i) cx += MED_EF; placerV(e, cx, y+MED_NIV); cx += e.taille; });
-    const a=n.enfants[0], b=n.enfants[n.enfants.length-1];
+    enf(n).forEach((e,i)=>{ if(i) cx += MED_EF; placerV(e, cx, y+MED_NIV); cx += e.taille; });
+    const a=enf(n)[0], b=enf(n)[enf(n).length-1];
     const c=(a.pivot+b.pivot)/2;
     n.debut = Math.min(Math.max(c-lp/2, gauche), gauche+n.taille-lp);
   }
@@ -401,18 +474,18 @@ function placerV(n, gauche, y){
 /* -- fiches : l'axe principal est vertical, les générations vont vers la droite -- */
 function mesurerH(n){
   const hp = taillePuces(n, FIC_H, FIC_EP);
-  if(!n.enfants.length){ n.taille = hp; n.tailleEnfants = 0; return n.taille; }
-  let s = 0; n.enfants.forEach((e,i)=>{ s += mesurerH(e); if(i) s += FIC_EF; });
+  if(!enf(n).length){ n.taille = hp; n.tailleEnfants = 0; return n.taille; }
+  let s = 0; enf(n).forEach((e,i)=>{ s += mesurerH(e); if(i) s += FIC_EF; });
   n.tailleEnfants = s; n.taille = Math.max(hp, s); return n.taille;
 }
 function placerH(n, haut, x){
   n.x = x;
   const hp = taillePuces(n, FIC_H, FIC_EP);
-  if(!n.enfants.length){ n.debut = haut + (n.taille-hp)/2; }
+  if(!enf(n).length){ n.debut = haut + (n.taille-hp)/2; }
   else{
     let cy = haut + (n.taille - n.tailleEnfants)/2;
-    n.enfants.forEach((e,i)=>{ if(i) cy += FIC_EF; placerH(e, cy, x+FIC_COL); cy += e.taille; });
-    const a=n.enfants[0], b=n.enfants[n.enfants.length-1];
+    enf(n).forEach((e,i)=>{ if(i) cy += FIC_EF; placerH(e, cy, x+FIC_COL); cy += e.taille; });
+    const a=enf(n)[0], b=enf(n)[enf(n).length-1];
     const c=(a.pivot+b.pivot)/2;
     n.debut = Math.min(Math.max(c-hp/2, haut), haut+n.taille-hp);
   }
@@ -422,17 +495,43 @@ function placerH(n, haut, x){
   n.centre = n.debut + hp/2;
 }
 
+/* Hauteur réellement occupée par un arbre déplié : le nombre de niveaux
+   ouverts, pas le nombre de générations existantes. */
+function niveauxOuverts(n){
+  if(!n.ouvert || !(n.enfants||[]).length) return 1;
+  let m = 0;
+  enf(n).forEach(e=>{ m = Math.max(m, niveauxOuverts(e)); });
+  return 1 + m;
+}
+
 function disposer(){
   if(mode==="portraits"){
     mesurerV(principal); placerV(principal, 0, 0);
-    detaches.forEach(d=>{ mesurerV(d);
-      if(ancNode) placerV(d, ancNode.pivot - d.taille/2, ancNode.y + Math.round(MED_NIV*1.55));
-      else placerV(d, 0, principal.taille + 120); });
+    if(ancNode && detaches.length === 1){
+      /* Le cas d'origine : un seul nœud détaché, rattaché sous l'ancêtre
+         par un trait pointillé — les générations manquantes de l'extrait. */
+      const d = detaches[0]; mesurerV(d);
+      placerV(d, ancNode.pivot - d.taille/2, ancNode.y + Math.round(MED_NIV*1.55));
+    }else{
+      /* Une forêt. Les empiler EN COLONNE, chacun sous le précédent.
+         Auparavant ils étaient tous placés au même point : deux cents arbres
+         superposés, illisibles, et rien ne le signalait — la page s'affichait
+         sans erreur. Une colonne se parcourt ; une superposition, non. */
+      let y = niveauxOuverts(principal) * MED_NIV + 140;
+      detaches.forEach(d=>{
+        mesurerV(d); placerV(d, 0, y);
+        y += niveauxOuverts(d) * MED_NIV + 90;
+      });
+    }
   }else{
     mesurerH(principal); placerH(principal, 0, 0);
-    detaches.forEach(d=>{ mesurerH(d);
-      if(ancNode) placerH(d, ancNode.pivot - d.taille/2, ancNode.x + Math.round(FIC_COL*1.75));
-      else placerH(d, 0, 0); });
+    if(ancNode && detaches.length === 1){
+      const d = detaches[0]; mesurerH(d);
+      placerH(d, ancNode.pivot - d.taille/2, ancNode.x + Math.round(FIC_COL*1.75));
+    }else{
+      let y = principal.taille + 90;
+      detaches.forEach(d=>{ mesurerH(d); placerH(d, y, 0); y += d.taille + 70; });
+    }
   }
 }
 
@@ -453,8 +552,13 @@ function vie(p){
 }
 function nomComplet(p){ return ((p.prenom||"")+" "+(p.nom||"")).trim(); }
 function initiales(p){
-  const a=(p.prenom||"?").trim()[0]||"?", b=(p.nom||"").trim()[0]||"";
-  return (a+b).toUpperCase();
+  /* Ne garder que des lettres. « Jos (Joseph) Pitre » donnait « J( » :
+     la parenthèse comptait comme initiale du nom. */
+  const lettre = s => { const m=(s||"").match(/[A-Za-zÀ-ÿ]/); return m?m[0]:""; };
+  const a = lettre(p.prenom) || "?";
+  const b = lettre((p.nom||"").replace(/^\(?[^)]*\)\s*/,"")) ||
+            lettre((p.nom_affiche||"").split(/\s+/).slice(-1)[0]);
+  return (a+(b||"")).toUpperCase();
 }
 function aProbleme(p){
   if(p.lacune) return true;
@@ -555,6 +659,24 @@ function puceFiche(id,x,y,directe,detache){
   couchPuces.appendChild(g); indexPuces[id]=g;
 }
 
+/* Le bouton de dépliage. Il a sa propre cible de clic, séparée du
+   médaillon : le clic sur un médaillon ouvre la fiche, et mêler les deux
+   gestes sur la même forme rendrait les deux imprévisibles. */
+function bouton(n, cx, cy){
+  if(!(n.enfants||[]).length) return;
+  const ferme = !n.ouvert;
+  const texte = ferme ? ("+"+n.total) : "−";
+  const larg = Math.max(22, 11 + texte.length*7.2);
+  const g = el("g",{class:"plier"+(ferme?" ferme":""),"data-noeud":n.id,
+                    transform:`translate(${cx-larg/2},${cy})`});
+  g.appendChild(el("rect",{x:0,y:0,width:larg,height:16,rx:8}));
+  const tx = el("text",{x:larg/2,y:11.5,"text-anchor":"middle"});
+  tx.textContent = texte; g.appendChild(tx);
+  g.addEventListener("click", ev=>{ ev.stopPropagation(); basculer(n.id); });
+  couchPuces.appendChild(g);
+  return g;
+}
+
 function dessinerV(n, detache){
   n.puces.forEach((pu,i)=>{
     puceMedaillon(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache);
@@ -568,7 +690,8 @@ function dessinerV(n, detache){
         t.textContent=lab[1]; couchLiens.appendChild(t); }
     }
   });
-  n.groupes.forEach((gr,gi)=>{
+  if(n.total) bouton(n, n.pivot, n.y+MED_H+10);
+  grp(n).forEach((gr,gi)=>{
     if(!gr.enfants.length) return;
     const idx=n.puces.findIndex(pu=>pu.union===gr.union);
     const xa=n.pivot, xb=idx>0?n.puces[idx].x+MED_L/2:xa;
@@ -598,7 +721,8 @@ function dessinerH(n, detache){
         t.textContent=lab[1]; couchLiens.appendChild(t); }
     }
   });
-  n.groupes.forEach((gr,gi)=>{
+  if(n.total) bouton(n, n.x+FIC_L+13, n.debut+FIC_H/2);
+  grp(n).forEach((gr,gi)=>{
     if(!gr.enfants.length) return;
     const idx=n.puces.findIndex(pu=>pu.union===gr.union);
     const ya=n.debut+FIC_H/2, yb=idx>0?n.puces[idx].y+FIC_H/2:ya;
@@ -615,6 +739,11 @@ function dessinerH(n, detache){
   });
 }
 
+let enCoursDeRendu=false;
+function redessine(garderVue){
+  if(enCoursDeRendu) return;
+  enCoursDeRendu=true; rendre(garderVue); enCoursDeRendu=false;
+}
 function rendre(garderVue){
   const vx=tx, vy=ty, ve=ech;
   monde.textContent=""; defs.textContent=""; indexPuces={};
@@ -643,7 +772,8 @@ function rendre(garderVue){
     }
   }
   if(garderVue){ tx=vx; ty=vy; ech=ve; appliquer(); } else vueInitiale();
-  chercher(); appliquerLignee();
+  if(!enCoursDeRendu) chercher();
+  appliquerLignee();
   if(selection && indexPuces[selection]){
     indexPuces[selection].classList.add("selectionne");
     if(boiteFiche.classList.contains("ouverte")) positionnerFiche(selection);
@@ -707,6 +837,7 @@ function zoomer(f){
 }
 document.getElementById("b-plus").onclick=()=>zoomer(1.25);
 document.getElementById("b-moins").onclick=()=>zoomer(.8);
+document.getElementById("b-replier").onclick=replierTout;
 document.getElementById("b-reset").onclick=recadrer;
 toile.addEventListener("click",()=>{ if(!aBouge) fermerFiche(); aBouge=false; });
 
@@ -901,16 +1032,33 @@ function chercher(){
   boite.classList.toggle("pleine",!!q);
   if(!q){ Object.values(indexPuces).forEach(g=>g.classList.remove("eteint","trouve"));
     compteur.textContent=""; appliquerLignee(); return; }
+  /* La recherche doit porter sur TOUT l'arbre, pas sur ce qui est
+     actuellement dessiné : chercher dans un arbre replié ne trouverait
+     presque rien, et l'utilisateur en concluerait que la personne n'y est
+     pas. On cherche donc dans les données, on ouvre les chemins, et on
+     redessine une fois. */
+  const assortis = Object.keys(P).filter(id=>{
+    const p=P[id];
+    return norm([nomComplet(p),p.surnom,(p.variantes||[]).join(" "),
+      (p.metiers||[]).join(" "),(p.lieux||[]).join(" ")].join(" ")).includes(q);
+  });
+  /* Ouvrir d'abord les chemins, redessiner, PUIS surligner. L'ordre
+     compte : surligner avant le redessin peignait un DOM qui allait être
+     jeté, et le compteur restait vide alors que la recherche avait bien
+     trouvé. Le défaut ne se voyait qu'en cherchant pour de vrai. */
+  let ouvert=false;
+  assortis.forEach(id=>{ if(indexNoeuds[id] && !indexPuces[id]){
+    if(ouvrirChemin(id)) ouvert=true; } });
+  if(ouvert) redessine(true);
   let n=0;
   Object.entries(indexPuces).forEach(([id,g])=>{
-    const p=P[id];
-    const foin=norm([nomComplet(p),p.surnom,(p.variantes||[]).join(" "),
-      (p.metiers||[]).join(" "),(p.lieux||[]).join(" ")].join(" "));
-    const ok=foin.includes(q);
+    const ok=assortis.indexOf(id)>=0;
     g.classList.toggle("trouve",ok); g.classList.toggle("eteint",!ok);
     if(ok) n++;
   });
-  compteur.textContent=n+(n>1?" trouvés":" trouvé");
+  const caches = assortis.length - n;
+  compteur.textContent = n+(n>1?" trouvés":" trouvé")
+    + (caches>0 ? " · "+caches+" replié"+(caches>1?"s":"") : "");
 }
 function appliquerLignee(){
   if(bLig.getAttribute("aria-pressed")!=="true") return;
