@@ -12,3 +12,4 @@ il doit suffire à savoir où regarder.
 | `C-005` | 2026-10-11 | Cadrage de la phase 1 : l'arbre de Samuel (doc-v2) | aucun — `tests/` inchangé |
 | `C-006` | 2026-10-11 | Deux fausses alarmes retirées du contrat | aucun ajouté ni retiré — empreinte reposée |
 | `C-007` | 2026-10-16 | Océrisation des deux documents, cadrage de la couverture (doc-v3) | aucun — `tests/` inchangé |
+| `C-008` | 2026-10-16 | Analyseur de transcription : 4 143 personnes lues sur 290 pages | aucun — `tests/` inchangé |

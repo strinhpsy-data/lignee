@@ -29,3 +29,6 @@ tests/_sorties/
 
 # Archives de transport vers le sas : elles se refabriquent
 arbre-genealogique-doc-*.zip
+
+# Transcription : se refabrique en relancant outils/transcrire.py
+transcription/
