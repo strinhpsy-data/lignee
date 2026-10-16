@@ -207,3 +207,52 @@ Les tests tournent sur `tests/donnees/`, jamais sur les données réelles (H-04)
 - **`exemple_formes.json`** — huit personnes, formes particulières : personne sans parents, personne à deux unions, enfant mort en bas âge, nœud détaché, lieu sans lien, date de certitude inconnue. Éprouve la disposition de l'arbre.
 
 Un nouveau cas de figure appelle **un ajout à ces jeux**, pas une modification des données réelles.
+
+---
+
+## Les documents paginés — `Scans/_documents.json`
+
+Ajouté par doc-v3. Second fichier déclaratif du projet, et le seul autre. Il
+dit quels fichiers de scan appartiennent à quel document source. Les noms que
+produit le numériseur sont des horodatages : ils ne portent ni page ni
+document, et rien d'autre ne peut le dire.
+
+```json
+{ "documents": [
+  { "id": "michel-jean",
+    "titre": "Michel Jean", "auteur": "Julienne Jean",
+    "edition": "révisé 06-2016",
+    "langue": "fra",
+    "pages": 290, "pages_certitude": "deduite",
+    "citation": "Michel Jean",
+    "fichiers": ["20261009120823990.pdf", "…"] } ] }
+```
+
+| Champ | Sens |
+|---|---|
+| `langue` | code tesseract : `fra`, `vie`. Détermine la passe d'océrisation. |
+| `pages` | total du document. **`null` si inconnu** — aucune alarme de fin n'est alors produite. |
+| `pages_certitude` | même vocabulaire que les faits datés. `deduite` quand le total vient des scans et non du livre. |
+| `citation` | la chaîne par laquelle le document est nommé dans les `sources` de l'arbre. C'est elle qui relie une donnée à une page. |
+| `fichiers` | dans l'ordre de numérisation. L'ordre compte : c'est lui qui permet de chaîner les lots. |
+
+Ce fichier vit dans `Scans/`, donc au `.gitignore` comme les données réelles.
+**Son format est versionné, son contenu ne l'est pas** — exactement comme
+`genealogie_jean.json`.
+
+### Ce que l'océrisation produit
+
+```
+Scans OCR/
+  _inventaire.json              traçabilité : scan, page physique, numéro, certitude
+  michel-jean/
+    p001.txt … p290.txt         une page, nommée par son numéro imprimé
+    _brut/<scan>-<page>.txt     cache de l'OCR, pour rejouer la résolution sans réocériser
+    _non-identifiees/           pages sans numéro sûr, et doublons de jointure
+  gia-pha-ho-trinh/
+    …
+```
+
+**Le nom du fichier est l'identité de la page** (H-24). `p018.txt` *est* la
+page 18. La couverture devient alors une liste de dossier, sans table à
+maintenir.

@@ -124,7 +124,33 @@ génération.
 
 ---
 
-## Phase 2 — L'export de branche
+## Phase 2 — Le rapport de couverture
+
+**Cadrée le 2026-10-16** à partir de la demande `D-003`. Spécification
+complète dans `08-couverture.md`.
+
+**Elle ne dépend pas de la phase 1.** Aucun fichier commun : le rapport lit
+`Scans/_documents.json`, le contenu de `Scans OCR/` et les `sources` du
+fichier de données. Il ne touche ni au générateur, ni à la disposition, ni au
+modèle de données. La règle de succession des phases ne s'applique donc pas
+entre 1 et 2.
+
+**C'est même le meilleur premier vrai travail de Qwen**, et pour une raison
+matérielle : il n'exige que Python et la bibliothèque standard. Tout le reste
+de ce chantier — l'océrisation — demande poppler et tesseract, dont la
+présence sur Wilfred n'est pas établie (`Q-05`).
+
+**Déjà fait, du côté de Claude :** les 407 pages des deux documents sont
+océrisées et nommées par numéro de page imprimé dans `Scans OCR/`, avec un
+inventaire traçable dans `_inventaire.json`. Il reste à écrire le rapport.
+
+**Candidats de tests :** `08-couverture.md`, section 7. Le contrôle décisif
+est celui qui donne une mention de source volontairement tordue et vérifie
+qu'aucune page n'en devient « intégrée ».
+
+---
+
+## Phase 3 — L'export de branche
 
 **À ouvrir quand la phase 1 est verte.** Spécification complète dans
 `07-branches-export.md`.
@@ -136,23 +162,37 @@ propres tests et sa propre relecture.
 
 ---
 
-## Phase 3 — Les générations manquantes
+## Phase 4 — Les générations manquantes
 
-**À cadrer avec Claude.** Le livre source descend jusqu'à la 10ᵉ génération ; l'extrait transcrit s'arrête à la 3ᵉ. Il manque le chaînon entre Pierre Jean et Michel Pierre Jean.
+**À cadrer avec Claude.** C'était la phase 1 de doc-v1, et sa matière première
+existe désormais : les 290 pages de *Michel Jean* sont océrisées. Le chaînon
+entre Pierre Jean et Michel Pierre Jean est dans ce texte.
 
-Ce qui relève du code : accueillir un arbre nettement plus grand sans que la disposition devienne illisible, et sans que la génération s'éternise.
+Ce qui relève du code : accueillir un arbre nettement plus grand sans que la
+disposition devienne illisible, et sans que la génération s'éternise.
 
-Ce qui n'en relève pas : la transcription elle-même. Elle reste éditoriale.
+Ce qui n'en relève pas : la transcription elle-même. Elle reste éditoriale, et
+le rapport de couverture de la phase 2 est précisément l'instrument qui dira
+où elle en est.
 
-**Candidats de tests :** disposition sur plusieurs centaines de personnes ; temps de génération borné ; repli lisible quand une fratrie compte plus de dix enfants.
+**Candidats de tests :** disposition sur plusieurs centaines de personnes ;
+temps de génération borné ; repli lisible quand une fratrie compte plus de dix
+enfants.
 
 ---
 
-## Phase 4 — Reprise des scans
+## Phase retirée — Reprise des scans
 
-**À cadrer.** Le dossier `Scans` contient le PDF d'origine et `Scans OCR` est vide. Une chaîne de reprise produirait du texte exploitable à partir des pages numérisées.
+C'était la phase 2 de doc-v1 : « une chaîne de reprise produirait du texte
+exploitable à partir des pages numérisées ». **Faite le 2026-10-16** par
+`outils/ocr_scans.py`, hors phase, parce qu'elle exigeait des outils absents
+de Wilfred.
 
-Attention : trois pages du PDF d'origine étaient numérisées à l'envers. Une chaîne qui ne détecte pas l'orientation produira du texte inventé avec aplomb.
+L'avertissement qu'elle portait s'est vérifié : « trois pages du PDF d'origine
+étaient numérisées à l'envers ; une chaîne qui ne détecte pas l'orientation
+produira du texte inventé avec aplomb. » Une quatrième page à l'envers a été
+trouvée dans le document vietnamien. La chaîne interroge donc l'orientation de
+**chaque** page, et pas du lot.
 
 ---
 

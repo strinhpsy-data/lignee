@@ -1,6 +1,6 @@
 # 01 — Fiche projet
 
-**Arbre généalogique de Samuel** · protocole v1.0 · mode **économe** · doc-v2
+**Arbre généalogique de Samuel** · protocole v1.0 · mode **économe** · doc-v3
 
 > doc-v1 décrivait l'arbre de la famille Jean. La demande `D-002` l'élargit :
 > l'arbre devient celui de Samuel, et la famille Jean en devient une des quatre
@@ -106,3 +106,13 @@ Toute amélioration, toute correction d'apparence, toute nouvelle fonction. Elle
 | **H-20** | `ancetre` **perd son rôle de cadrage** et devient une étiquette par branche, purement descriptive. Conséquence dans le code : le placement des nœuds détachés, qui s'ancre aujourd'hui sur l'ancêtre, a besoin d'un autre point d'appui. |
 | **H-21** | Tout export de branche est une version partageable. **Il n'existe pas d'export complet**, et aucune option ne permet de le contourner. |
 | **H-22** | Un seul fichier de données pour les quatre branches. Les exports sont des **sorties**, jamais des entrées : rien ne se ressaisit depuis un fichier exporté. |
+
+### doc-v3 — couverture des sources (`D-003`)
+
+| | |
+|---|---|
+| **H-23** | La chaîne d'océrisation **n'est pas une dépendance du générateur**. Elle vit dans `outils/`, avec ses propres besoins (poppler, tesseract) ; `Generer_Arbre.bat` et `Tester.bat` les ignorent, et H-10 tient. |
+| **H-24** | **L'identité d'une page est son nom de fichier** : `Scans OCR/<doc>/p018.txt` *est* la page 18. Aucune table intermédiaire entre les scans et les pages — donc rien à désynchroniser. |
+| **H-25** | Les erreurs du rapport de couverture **penchent du côté de l'alarme**. Toute ambiguïté se résout en « non intégrée », et une mention de source illisible est listée plutôt qu'ignorée. |
+| **H-26** | Le partage du travail suit **la ligne des dépendances** : l'océrisation à Claude sur dellg5 parce qu'elle exige tesseract, le rapport à Qwen parce qu'il n'exige que Python. |
+| **H-27** | Un numéro de page **déduit** l'est à partir du décalage établi par les numéros lus du même lot de scan — une preuve, pas une supposition — et il est marqué comme tel. Ni lu ni encadré, il reste inconnu. |

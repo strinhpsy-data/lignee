@@ -69,3 +69,37 @@ Gabarit :
   Une branche sans `retour` s'exporte mais ne porte pas de page d'invitation. La
   structure accueille les deux réponses sans être modifiée.
 - Résolution :
+
+### Q-05 — Tesseract et les packs de langue sur Wilfred
+
+- Soulevée par : Sébastien — « normalement, Wilfred a tesseract mais il n'a
+  probablement pas le pack de langage vietnamien et je ne sais pas pour le
+  francais »
+- Étape : `C-007`
+- Question : l'état réel est **inconnu**, et les notes de suivi le confirment
+  plutôt que de l'infirmer. Le 26 juin, « Installer les outils non-LLM
+  (pdftotext, Tesseract+FR…) » : case non cochée. Le 1ᵉʳ juillet, l'étape
+  « vérifier l'existant sur Wilfred » est marquée **non faite**, et le pack
+  `fra` qualifié d'« indispensable ». La fenêtre de provisionnement s'est
+  scellée le 5 juillet. Aucun document ne consigne un `tesseract --version`
+  réussi là-bas ; le vietnamien n'y apparaît nulle part.
+- Ce qui a été fait en attendant : l'océrisation a été faite sur dellg5, et le
+  partage du travail ne dépend plus de la réponse (H-26). Trois commandes très
+  courtes la donneront : `tesseract --version`, `tesseract --list-langs`,
+  `pdftoppm -v`.
+- Résolution :
+
+### Q-06 — Les quatre lacunes du document vietnamien
+
+- Soulevée par : Claude
+- Étape : `C-007`
+- Question : les pages 53, 54, 75 et 86 de *Gia phả họ Trịnh* n'apparaissent
+  dans aucun scan. Mais elles tombent **exactement aux jointures de lots**, là
+  où le document français montre des chevauchements, et le taux
+  d'attestation vietnamien est faible — 43 numéros lus sur 98. Plusieurs pages
+  voisines donnent un numéro lu qui diffère d'une unité du numéro déduit. Ces
+  lacunes sont donc **à vérifier sur le papier**, pas établies.
+- Ce qui a été fait en attendant : rien d'automatique. Le rapport de
+  couverture doit porter cette réserve dans sa sortie plutôt que d'affirmer
+  une lacune (`08-couverture.md`, § 6).
+- Résolution :

@@ -265,3 +265,36 @@ Julienne Jean, *Michel Jean*, révisé en 06-2016, pages 1 à 10.
 L'auteure s'appuie notamment sur Lucie Jean-Haffner, *Les quatre frères Jean — de La Rochelle à Québec* (1989), et sur un article de Gérard Lebel, C.Ss.R., paru dans la *Revue Ste-Anne* de mai 1994.
 
 Rien dans ces données ne provient d'une recherche extérieure : tout est tiré de l'extrait, et ce qui en est déduit est marqué comme tel.
+
+---
+
+## Les sources numérisées
+
+Les deux documents sources sont océrisés depuis le 2026-10-16 :
+
+| Document | Langue | Pages | Numéros attestés |
+|---|---|---|---|
+| *Michel Jean*, Julienne Jean | français | **1 à 290**, sans lacune | 269 / 290 |
+| *Gia phả họ Trịnh*, Huỳnh Công Chánh | vietnamien | 5 à 106 | 43 / 98 |
+
+Le texte est dans `Scans OCR`, **une page par fichier, nommée par son numéro
+imprimé** : `michel-jean/p018.txt` est la page 18 du livre. Pour retrouver un
+passage, il suffit donc de connaître sa page.
+
+Le livre de Julienne Jean fait au moins 290 pages, et non 247 comme l'indiquait
+ce fichier : 247 était un plancher. Les vingt-huit lots de numérisation se
+chaînent bout à bout sans trou, ce qui est une preuve de complétude plutôt
+qu'une impression.
+
+**Deux points à vérifier sur le papier** : s'il y a quelque chose après la page
+290 du livre français ; et les pages 53, 54, 75 et 86 du document vietnamien,
+qui n'apparaissent dans aucun scan — mais dont l'absence n'est pas certaine,
+les numéros de ce document se lisant mal.
+
+Pour relancer l'océrisation après avoir ajouté des scans :
+
+    python outils/ocr_scans.py --ocr        (reprend où elle s'est arrêtée)
+    python outils/ocr_scans.py --resoudre   (renomme les pages, rapide)
+
+Cet outil a besoin de tesseract et de poppler. **Le reste du projet, non** :
+l'arbre se génère et les tests passent sans eux.

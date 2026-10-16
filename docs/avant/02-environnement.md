@@ -81,3 +81,34 @@ Tout nouveau script livré en phase 1 ou plus tard reçoit son `.bat`. Un script
 **La suppression est refusée** sur les dossiers connectés : `rm`, `del`, `unlink` échouent avec « Opération non permise ». Le générateur a été écrit pour ne jamais supprimer — il signale les fiches orphelines et s'arrête là. Ne réintroduisez aucune suppression pour contourner l'obstacle.
 
 **Un fichier produit n'est pas une preuve.** Le générateur peut écrire un HTML parfaitement formé dont le JavaScript est mort. Seul le contrôle navigateur, qui clique réellement, le détecte. C'est arrivé : une capture de pointeur rendait tous les médaillons inertes pendant qu'un test à événement simulé passait au vert.
+
+---
+
+## Les outils de l'océrisation — hors du chemin critique
+
+`outils/ocr_scans.py` a besoin de trois choses que le reste du projet ignore :
+
+| | Rôle | Vérifier par |
+|---|---|---|
+| `pdfinfo`, `pdftoppm` | poppler : compter et rendre les pages | `pdftoppm -v` |
+| `tesseract` | l'océrisation elle-même | `tesseract --version` |
+| `fra.traineddata`, `vie.traineddata` | les deux langues des documents | `tesseract --list-langs` |
+
+**Ce ne sont pas des dépendances du projet** (H-23). Le générateur ne connaît
+que Python et Pillow, et `Tester.bat` reste vert sans aucun de ces outils. Si
+l'un manque, c'est `ocr_scans.py` seul qui s'arrête, en le disant.
+
+Les deux fichiers de langue sont dans `outils/tessdata/` et le script les
+désigne par `--tessdata-dir`. Ça évite une installation système, donc ça
+marche sur un poste où l'on n'est pas administrateur.
+
+**Mesures du 2026-10-16, sur dellg5** (deux cœurs) : rendu groupé à 200 dpi,
+0,4 s par page ; détection d'orientation, 0,8 s ; océrisation, 7,8 s en série
+mais **1,7 s par page** avec un processus par cœur et `OMP_THREAD_LIMIT=1`.
+407 pages en une dizaine de minutes. Tesseract se parallélise mal tout seul :
+il faut lui interdire ses propres fils et multiplier les processus.
+
+Deux réglages payés d'expérience : `--psm 3` et non `--psm 1`, parce que le
+mode 1 refait en interne la détection d'orientation qu'on vient de lui
+demander séparément ; et 200 dpi, éprouvé suffisant en français comme en
+vietnamien.
