@@ -17,3 +17,4 @@ il doit suffire à savoir où regarder.
 | `C-010` | 2026-10-16 | Sébastien retrouvé dans les deux livres — l'arbre de Samuel, 24 personnes vérifiées | aucun — `tests/` inchangé |
 | `C-011` | 2026-10-16 | Parcours montant, branches en couleur, grand-mère paternelle rétablie | aucun — `tests/` inchangé |
 | `C-012` | 2026-10-16 | Fiches contributives : portrait, dates, Photos, Recettes, et le chemin de retour | aucun — `tests/` inchangé |
+| `C-013` | 2026-10-16 | Réparation : générateur cassé par C-012 — valider avant d'écrire | aucun |

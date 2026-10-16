@@ -1930,7 +1930,7 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
         corps.append('<p class="src" id="sans-portrait">Pas encore de portrait. '
                      "Cliquez sur le rond en haut de la page pour en choisir un sur "
                      "cet ordinateur — ou déposez une image nommée "
-                     f'<code>{esc(pid)}.jpg</code> dans le dossier <code>photos</code>.</p>")
+                     f'<code>{esc(pid)}.jpg</code> dans le dossier <code>photos</code>.</p>')
 
     meta = donnees.get("meta", {})
     pied = (f'Fiche générée le {date_gen} à partir de <strong>{esc(meta.get("titre",""))}</strong>. '
