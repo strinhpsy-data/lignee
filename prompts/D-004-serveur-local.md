@@ -52,3 +52,32 @@ suffisant.
 
 **Le serveur reste sous les mêmes interdits que le reste** : bibliothèque
 standard seule, aucune suppression, écriture confinée à `photos/`.
+
+
+---
+
+## Reformulation du 2026-10-16, après objection
+
+> « Ce n'est pas une bonne idée de me limiter pendant que je développe…
+> L'interdit serait mieux servi en n'étant appliqué qu'aux exportations pour
+> la famille »
+
+Objection retenue. Ma première rédaction gardait l'en-tête « les fichiers
+produits s'ouvrent sans rien à côté » et découpait le serveur local comme
+une **exception tolérée**. C'était la mauvaise polarité : elle contraignait
+le poste de travail, où la contrainte ne protège personne, et ne faisait de
+l'export qu'un cas particulier.
+
+La bonne rédaction attache l'interdit à **ce qui sort de la maison**. Sur son
+poste, Sébastien utilise ce qu'il veut.
+
+### Ce que la reformulation gagne, et que je n'avais pas vu
+
+Une règle sur la *façon d'écrire* se tient par discipline : personne ne peut
+l'éprouver, on ne peut que s'en souvenir. Une règle sur **une propriété de
+l'export** s'éprouve par un contrôle.
+
+D'où `T-37` : la version partageable est ouverte dans un navigateur **en
+`file://`**, et doit se charger sans erreur, sans requête réseau, et offrir
+le chemin de retour par fichier. L'interdit cesse d'être une consigne pour
+devenir une mesure.

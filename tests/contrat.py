@@ -427,6 +427,100 @@ def controler_navigateur(sortie, d):
         controle("T-34", "la couche navigateur s'exécute", False, f"{type(e).__name__}: {e}")
 
 
+def controler_export_autonome(chemin, d):
+    """T-37 — un export destiné à la parenté s'ouvre SEUL.
+
+    C'est l'interdit 4, devenu mesurable. Tant qu'il disait « les pages
+    produites s'ouvrent sans rien à côté », il contraignait la façon
+    d'écrire et ne se tenait que par discipline. Déplacé sur l'export, il
+    devient une propriété qu'on éprouve : on ouvre vraiment la page en
+    « file:// », sans serveur, et on regarde si elle marche.
+
+    La page est à double chemin : servie elle enregistre, ouverte en fichier
+    elle rend un fichier d'ajouts. Ce contrôle garde la seconde moitié —
+    celle que personne n'utilise au quotidien, donc celle qui casserait sans
+    qu'on s'en aperçoive, et celle dont dépend toute la parenté."""
+    titre("E. L'export s'ouvre sans serveur")
+
+    base = chemin.stem.replace("genealogie_", "arbre_") + "_partage"
+    dossier = chemin.with_name(base + "_fiches")
+    fiches = sorted(dossier.glob("*.html")) if dossier.exists() else []
+    if not fiches:
+        saut("export autonome", "aucune version partageable produite par ce jeu")
+        return
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        saut("export autonome", "Playwright absent — voir docs/avant/02-environnement.md")
+        return
+
+    page_test = fiches[0]
+    try:
+        with sync_playwright() as pw:
+            nav = None
+            for essai in (None, "msedge", "chrome"):
+                try:
+                    nav = pw.chromium.launch(channel=essai) if essai else pw.chromium.launch()
+                    break
+                except Exception:
+                    continue
+            if nav is None:
+                saut("export autonome", "aucun navigateur lançable")
+                return
+            ctx = nav.new_context(accept_downloads=True)
+            page = ctx.new_page()
+            fautes, demandes = [], []
+            page.on("pageerror", lambda e: fautes.append(str(e)))
+            # Toutes les demandes, échecs compris : depuis une page
+            # « file:// », un fetch devient « file:///… », échoue sur place
+            # et n'apparaît pas comme requête http.
+            page.on("request", lambda rq: demandes.append(rq.url))
+            page.on("requestfailed", lambda rq: demandes.append(rq.url))
+
+            page.goto(page_test.as_uri())
+            page.wait_for_timeout(1400)
+
+            dehors = [u for u in demandes
+                      if u.startswith(("http://", "https://"))
+                      or "_jeton" in u or "_ajouts" in u]
+
+            controle("T-37", "l'export s'ouvre en file:// sans erreur",
+                     not fautes, " · ".join(fautes[:2]))
+            controle("T-38", "l'export ne demande rien à un serveur",
+                     not dehors, " · ".join(dehors[:3]))
+            jeton = page.evaluate("() => (typeof JETON !== 'undefined') ? JETON : 'absent'")
+            controle("T-39", "hors serveur, la page n'obtient aucun jeton",
+                     jeton in (None, "absent"), f"JETON = {jeton!r}")
+
+            # T-40 — LE contrôle qui mesure la garantie elle-même, et non un
+            # indice d'icelle. Les trois précédents regardent ce que la page
+            # s'abstient de faire ; celui-ci regarde si elle fait ce dont le
+            # parent a besoin : rendre son fichier.
+            #
+            # Éprouvé par sabotage le 2026-10-16 : T-37, T-38 et T-39
+            # restaient verts sur une page privée de ses deux replis.
+            # T-40 est passé au rouge. Les trois premiers sont des indices ;
+            # celui-ci est la mesure.
+            rendu = None
+            try:
+                page.click("#b-recette")
+                page.fill("#liste-recettes input", "Épreuve")
+                page.wait_for_timeout(250)
+                with page.expect_download(timeout=5000) as dl:
+                    page.click("#b-enregistrer")
+                rendu = dl.value.suggested_filename
+            except Exception:
+                rendu = None
+            controle("T-40", "sur l'export, « Enregistrer » rend bien un fichier",
+                     bool(rendu and rendu.startswith("ajouts-")),
+                     f"fichier rendu : {rendu!r}")
+            nav.close()
+    except Exception as e:
+        controle("T-41", "le contrôle d'export s'exécute", False,
+                 f"{type(e).__name__}: {e}")
+
+
 # =====================================================================
 def une_passe(chemin, sans_nav):
     print("\n" + "=" * 62)
@@ -459,6 +553,7 @@ def une_passe(chemin, sans_nav):
     controler_confidentialite(copie, d)
     if sortie and not sans_nav:
         controler_navigateur(sortie, d)
+        controler_export_autonome(copie, d)
     elif sans_nav:
         saut("couche navigateur", "écartée par --sans-navigateur")
     return True

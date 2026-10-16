@@ -1,7 +1,7 @@
 # EMPREINTE DU CONTRAT DE VÉRIFICATION
 #
-# Posée par Claude le 2026-10-11.
+# Posée par Claude le 2026-10-16.
 # Ne pas modifier à la main. Si un contrôle vous semble faux,
 # inscrivez une question Q-xx au journal et poursuivez ailleurs.
 #
-5fe5a6ab655548f73f41432440d5e7379c53bfaaa98480ea148a9819e271e0f0  contrat.py
+57d9cb55e7b5d4afa4bcfa95d91afd3a79979784b379b06f5d3fd7baa033d8a6  contrat.py
