@@ -1561,14 +1561,69 @@ function rendreRecettes(){
   });
 }
 
-/* ---- 5. rendre le fichier ---- */
-document.getElementById("b-enregistrer").addEventListener("click", ()=>{
-  AJOUTS.date = new Date().toISOString().slice(0,10);
+/* ---- 5. enregistrer ----
+   DEUX CHEMINS, UNE SEULE PAGE. Servie par le serveur local, elle écrit
+   directement. Ouverte par double-clic, elle rend un fichier d'ajouts.
+
+   C'est la page qui constate comment elle a été ouverte, et non deux
+   versions à maintenir : deux versions divergeraient, et c'est celle qu'on
+   teste le moins qui partirait chez la parenté. L'amendement de l'interdit 4
+   l'exige — un export doit rester utilisable sans serveur. */
+let JETON = null;
+if(location.protocol === "http:" || location.protocol === "https:"){
+  fetch("/_jeton").then(r=>r.ok?r.json():null).then(o=>{
+    if(o && o.jeton){
+      JETON = o.jeton;
+      const b = document.getElementById("b-enregistrer");
+      if(b) b.textContent = "Enregistrer dans le projet";
+    }
+  }).catch(()=>{});
+}
+
+function parFichier(){
   const b = new Blob([JSON.stringify(AJOUTS, null, 1)], {type:"application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(b); a.download = "ajouts-" + PID + ".json";
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  dire("Fichier rendu. Déposez-le sur Appliquer_Ajouts.bat.");
+}
+
+function dire(txt){ document.getElementById("quoi").textContent = txt; }
+
+function parServeur(){
+  dire("Enregistrement…");
+  fetch("/_ajouts", {method:"POST", headers:{
+      "Content-Type":"application/json", "X-Jeton":JETON},
+      body: JSON.stringify(AJOUTS)})
+   .then(r=>r.json())
+   .then(o=>{
+     if(o && o.ok){
+       dire("Enregistré dans le projet.");
+       try { localStorage.removeItem(CLE); } catch(e){}
+       /* On vide ce qui est versé : le laisser à l'écran ferait croire
+          qu'il reste à faire, et un second envoi serait refusé pour
+          doublon sans que personne comprenne pourquoi. */
+       AJOUTS.portrait = null; AJOUTS.faits = {};
+       AJOUTS.photos = []; AJOUTS.recettes = [];
+       rendrePhotos(); rendreRecettes();
+       setTimeout(()=>{ document.getElementById("barre")
+                          .classList.remove("visible"); }, 2200);
+     } else {
+       dire("Refusé : " + ((o && o.erreur) || "raison inconnue"));
+     }
+   })
+   .catch(e=>{
+     /* Le serveur a pu être fermé entre-temps. On ne perd rien : on
+        retombe sur le fichier. */
+     dire("Serveur injoignable — on passe par le fichier.");
+     setTimeout(parFichier, 700);
+   });
+}
+
+document.getElementById("b-enregistrer").addEventListener("click", ()=>{
+  AJOUTS.date = new Date().toISOString().slice(0,10);
+  if(JETON) parServeur(); else parFichier();
 });
 
 /* ---- reprise d'un brouillon ---- */
@@ -1908,8 +1963,9 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
            '<button type="button" class="b-ajout" id="b-photos">'
            '+ Ajouter des photos</button>'
            '<p class="note-ajout">Les photos choisies s\'affichent tout de suite. '
-           'Elles ne sont rangées dans le projet qu\'une fois le fichier d\'ajouts '
-           'déposé sur <code>Appliquer_Ajouts.bat</code>.</p>')
+           'Ouverte depuis <code>Serveur_Local.bat</code>, cette fiche les range '
+           'directement dans le projet ; ouverte par double-clic, elle rend un '
+           'fichier d\'ajouts à déposer sur <code>Appliquer_Ajouts.bat</code>.</p>')
     ajoute("recettes", "Recettes",
            '<div id="liste-recettes"></div>'
            '<button type="button" class="b-ajout" id="b-recette">'

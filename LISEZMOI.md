@@ -241,6 +241,25 @@ Si le `.bat` signale une erreur de syntaxe, il indique la ligne et la colonne fa
 
 **Ce qui manque et qui bloque la suite :** les générations 4 et 5, c'est-à-dire le chaînon entre Pierre Jean (baptisé à La Rochelle en 1645) et Michel Pierre Jean, colon-défricheur de St-Mathieu, à qui le livre est consacré. L'extrait fourni s'arrête avant. Le livre complet fait au moins 247 pages et descend jusqu'à la 10ᵉ génération.
 
+## Deux façons d'ouvrir l'arbre
+
+**Par double-clic** sur `arbre_samuel.html` : tout se consulte, et les fiches
+rendent un fichier d'ajouts à déposer sur `Appliquer_Ajouts.bat`. C'est le
+mode qui voyage — un parent à qui vous envoyez une branche n'a rien à
+installer.
+
+**Par `Serveur_Local.bat`** : la même page, servie sur `127.0.0.1`, enregistre
+directement dans le projet. Un clic sur le rond du portrait ouvre le
+sélecteur de fichiers ; la photo, la date ou la recette sont rangées
+immédiatement. Fermez la fenêtre noire pour arrêter le serveur.
+
+C'est la **même page** dans les deux cas : elle constate comment elle a été
+ouverte. Il n'y a pas deux versions à maintenir, donc pas de version qu'on
+teste moins et qui parte chez la parenté.
+
+Le serveur n'écoute que sur `127.0.0.1` : rien d'autre que votre ordinateur
+ne peut l'atteindre, et l'air-gap de Wilfred n'en est pas entamé.
+
 ## Ce qui change en phase 1
 
 Cadré le 2026-10-11, pas encore codé. Quatre choses, dans cet ordre :
