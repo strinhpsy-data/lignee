@@ -1374,6 +1374,43 @@ td{padding:9px 12px 9px 0; border-bottom:1px solid var(--line-soft); vertical-al
   border-radius:0 7px 7px 0; font-size:14px; line-height:1.55; margin:0 0 11px}
 .avis b{color:var(--alerte); text-transform:uppercase; font-size:10.5px; letter-spacing:.7px}
 .src{font-size:13px; color:var(--faint); font-style:italic; line-height:1.55; margin:0}
+
+/* ---- ajouts : portrait, dates, photos, recettes ---- */
+.zone-portrait{position:relative; cursor:pointer; border-radius:50%}
+.zone-portrait::after{content:"Ajouter une photo"; position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center; text-align:center;
+  border-radius:50%; background:color-mix(in srgb,var(--ink) 62%,transparent);
+  color:#fff; font-size:12px; font-weight:600; opacity:0; transition:opacity .14s;
+  padding:0 14px; line-height:1.3}
+.zone-portrait:hover::after, .zone-portrait:focus-visible::after{opacity:1}
+.b-modif{border:1px solid var(--line); background:var(--surface); color:var(--muted);
+  font:inherit; font-size:11px; border-radius:6px; padding:1px 7px; margin-left:8px;
+  cursor:pointer; vertical-align:2px}
+.b-modif:hover{border-color:var(--or); color:var(--or)}
+.b-ajout{border:1px dashed var(--line); background:transparent; color:var(--muted);
+  font:inherit; font-size:13.5px; border-radius:8px; padding:9px 15px; cursor:pointer}
+.b-ajout:hover{border-color:var(--or); color:var(--or); border-style:solid}
+.saisie{font:inherit; font-size:14.6px; padding:5px 9px; border:1px solid var(--or);
+  border-radius:6px; background:var(--surface); color:var(--ink); min-width:230px}
+.saisie-l{width:100%; box-sizing:border-box; margin-bottom:8px}
+textarea.saisie{min-height:110px; line-height:1.55; resize:vertical}
+.vignettes{display:flex; flex-wrap:wrap; gap:13px; margin:0 0 13px}
+.vignette{width:132px}
+.vignette img{width:132px; height:132px; object-fit:cover; border-radius:8px;
+  border:1px solid var(--line)}
+.recette{border-left:3px solid var(--or); padding:2px 0 2px 14px; margin:0 0 15px}
+.recette h3{margin:0 0 5px; font-size:15.5px}
+.recette p{margin:0; white-space:pre-wrap; line-height:1.6}
+.barre-ajouts{position:fixed; left:50%; transform:translateX(-50%); bottom:20px;
+  background:var(--surface); border:1px solid var(--or); border-radius:11px;
+  padding:11px 17px; display:none; align-items:center; gap:15px; z-index:40;
+  box-shadow:0 6px 26px color-mix(in srgb,var(--ink) 17%,transparent); font-size:14px}
+.barre-ajouts.visible{display:flex}
+.barre-ajouts button{border:0; background:var(--or); color:#fff; font:inherit;
+  font-weight:600; border-radius:7px; padding:7px 15px; cursor:pointer}
+.barre-ajouts .quoi{color:var(--muted)}
+.note-ajout{font-size:12.4px; color:var(--faint); line-height:1.55; margin:9px 0 0;
+  font-style:italic}
 .rel{display:grid; grid-template-columns:auto 1fr; gap:9px 18px; font-size:14.6px; margin:0}
 .rel dt{color:var(--faint); font-size:10.5px; text-transform:uppercase; letter-spacing:.7px;
   font-weight:700; padding-top:3px; white-space:nowrap}
@@ -1398,6 +1435,164 @@ footer{border-top:1px solid var(--line-soft); margin:46px 0 0; padding:18px 0 0;
     <footer>__PIED__</footer>
   </div>
 </main>
+<div class="barre-ajouts" id="barre"><span class="quoi" id="quoi"></span>
+  <button type="button" id="b-enregistrer">Enregistrer mes ajouts</button></div>
+<input type="file" id="f-portrait" accept="image/*" hidden>
+<input type="file" id="f-photos" accept="image/*" multiple hidden>
+<script>
+/* ===================================================================
+   AJOUTS — portrait, dates, photos, recettes.
+
+   Une page ouverte en « file:// » NE PEUT PAS écrire sur le disque :
+   c'est une barrière du navigateur, pas une limite de ce code. Elle peut
+   en revanche lire un fichier que vous choisissez, l'afficher tout de
+   suite, et vous rendre un seul fichier d'ajouts.
+
+   Ce fichier se dépose ensuite sur « Appliquer_Ajouts.bat », qui range les
+   photos et verse les textes dans les données. Aucun serveur, aucun réseau,
+   et la page reste lisible par un parent sur n'importe quelle machine.
+   =================================================================== */
+const PID = "__PID__", PNOM = "__NOMJS__";
+const AJOUTS = {id:PID, nom:PNOM, portrait:null, faits:{}, photos:[], recettes:[]};
+const CLE = "ajouts:" + PID;
+
+function compte(){
+  return (AJOUTS.portrait?1:0) + Object.keys(AJOUTS.faits).length
+       + AJOUTS.photos.length + AJOUTS.recettes.length;
+}
+function majBarre(){
+  const n = compte();
+  document.getElementById("barre").classList.toggle("visible", n>0);
+  document.getElementById("quoi").textContent =
+    n + (n>1 ? " ajouts en attente" : " ajout en attente");
+  /* Filet de sécurité seulement : le vrai enregistrement est le fichier.
+     Sur file:// le stockage du navigateur est capricieux, donc on essaie
+     sans jamais en dépendre. */
+  try { localStorage.setItem(CLE, JSON.stringify(AJOUTS)); } catch(e){}
+}
+function lire(fichier, suite){
+  const l = new FileReader();
+  l.onload = () => suite(l.result);
+  l.readAsDataURL(fichier);
+}
+
+/* ---- 1. le portrait ---- */
+const zone = document.getElementById("zone-portrait");
+const fPortrait = document.getElementById("f-portrait");
+if(zone){
+  zone.addEventListener("click", ()=>fPortrait.click());
+  zone.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault(); fPortrait.click();} });
+}
+fPortrait.addEventListener("change", ()=>{
+  const f = fPortrait.files[0]; if(!f) return;
+  lire(f, d=>{
+    zone.innerHTML = '<img class="portrait" alt="">';
+    zone.querySelector("img").src = d;
+    AJOUTS.portrait = {fichier:f.name, donnee:d};
+    const avis = document.getElementById("sans-portrait");
+    if(avis) avis.remove();     /* la consigne ne vaut plus : on vient de le faire */
+    majBarre();
+  });
+});
+
+/* ---- 2. les dates ---- */
+function demanderFait(b){
+  const cle = b.dataset.fait, dd = b.closest("dd") || b.parentElement;
+  if(dd.querySelector(".saisie")) return;
+  const i = document.createElement("input");
+  i.className="saisie"; i.type="text"; i.value = AJOUTS.faits[cle] || "";
+  i.placeholder = "jj-mm-aaaa, ou ce que vous savez";
+  const ok = document.createElement("button");
+  ok.className="b-modif"; ok.type="button"; ok.textContent="Garder";
+  ok.addEventListener("click", ()=>{
+    const v = i.value.trim();
+    if(v) AJOUTS.faits[cle]=v; else delete AJOUTS.faits[cle];
+    dd.textContent = v || "—";
+    const nb=document.createElement("button");
+    nb.className="b-modif"; nb.type="button"; nb.dataset.fait=cle; nb.textContent="modifier";
+    dd.appendChild(nb); nb.addEventListener("click", ()=>demanderFait(nb));
+    majBarre();
+  });
+  i.addEventListener("keydown", e=>{ if(e.key==="Enter") ok.click(); });
+  dd.textContent=""; dd.appendChild(i); dd.appendChild(ok); i.focus();
+}
+
+/* ---- 3. les photos ---- */
+const fPhotos = document.getElementById("f-photos");
+document.getElementById("b-photos").addEventListener("click", ()=>fPhotos.click());
+fPhotos.addEventListener("change", ()=>{
+  [...fPhotos.files].forEach(f=>lire(f, d=>{
+    AJOUTS.photos.push({fichier:f.name, donnee:d, legende:""});
+    rendrePhotos(); majBarre();
+  }));
+});
+function rendrePhotos(){
+  const h = document.getElementById("liste-photos");
+  h.innerHTML = "";
+  AJOUTS.photos.forEach((ph,k)=>{
+    const d = document.createElement("div"); d.className="vignette";
+    const im = document.createElement("img"); im.src = ph.donnee; d.appendChild(im);
+    const lg = document.createElement("input");
+    lg.className="saisie saisie-l"; lg.placeholder="Légende"; lg.value=ph.legende;
+    lg.style.marginTop="7px"; lg.style.fontSize="12.5px";
+    lg.addEventListener("input", ()=>{ ph.legende = lg.value; majBarre(); });
+    d.appendChild(lg); h.appendChild(d);
+  });
+}
+
+/* ---- 4. les recettes ---- */
+document.getElementById("b-recette").addEventListener("click", ()=>{
+  AJOUTS.recettes.push({titre:"", texte:""}); rendreRecettes(); majBarre();
+  const t = document.querySelector("#liste-recettes .saisie"); if(t) t.focus();
+});
+function rendreRecettes(){
+  const h = document.getElementById("liste-recettes");
+  h.innerHTML = "";
+  AJOUTS.recettes.forEach(rc=>{
+    const d = document.createElement("div"); d.className="recette";
+    const ti = document.createElement("input");
+    ti.className="saisie saisie-l"; ti.placeholder="Nom de la recette"; ti.value=rc.titre;
+    ti.addEventListener("input", ()=>{ rc.titre=ti.value; majBarre(); });
+    const tx = document.createElement("textarea");
+    tx.className="saisie saisie-l"; tx.placeholder="Ingrédients, préparation, et de qui elle vient…";
+    tx.value=rc.texte;
+    tx.addEventListener("input", ()=>{ rc.texte=tx.value; majBarre(); });
+    d.appendChild(ti); d.appendChild(tx); h.appendChild(d);
+  });
+}
+
+/* ---- 5. rendre le fichier ---- */
+document.getElementById("b-enregistrer").addEventListener("click", ()=>{
+  AJOUTS.date = new Date().toISOString().slice(0,10);
+  const b = new Blob([JSON.stringify(AJOUTS, null, 1)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b); a.download = "ajouts-" + PID + ".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+});
+
+/* ---- reprise d'un brouillon ---- */
+try {
+  const vieux = localStorage.getItem(CLE);
+  if(vieux){
+    const o = JSON.parse(vieux);
+    Object.assign(AJOUTS, o);
+    if(AJOUTS.portrait && zone){
+      zone.innerHTML = '<img class="portrait" alt="">';
+      zone.querySelector("img").src = AJOUTS.portrait.donnee;
+    }
+    Object.entries(AJOUTS.faits||{}).forEach(([cle,v])=>{
+      const b = document.querySelector('[data-fait="'+cle+'"]');
+      if(b){ const dd=b.closest("dd")||b.parentElement; dd.textContent=v; dd.appendChild(b); }
+    });
+    rendrePhotos(); rendreRecettes(); majBarre();
+  }
+} catch(e){}
+document.querySelectorAll("[data-fait]").forEach(b=>{
+  const clone=b.cloneNode(true); b.replaceWith(clone);
+  clone.addEventListener("click", ()=>demanderFait(clone));
+});
+</script>
 <script>
 document.querySelectorAll(".voile button").forEach(b=>b.addEventListener("click",()=>{
   const v=b.closest(".voile"), c=v.querySelector(".voile-contenu");
@@ -1614,8 +1809,14 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
     if any(s.get("prive") for s in p.get("sections", [])):
         jetons += '<span class="jeton j-al">Contient du confidentiel</span>'
 
-    portrait = (f'<img class="portrait" src="{p["_photo"]}" alt="">' if p.get("_photo")
-                else f'<div class="mono">{esc(initiales(p))}</div>')
+    # Le portrait est une zone cliquable, avec ou sans image : on remplace
+    # aussi bien qu'on ajoute. Le titre dit ce qui va se passer, parce qu'un
+    # rond cliquable sans libellé ne se devine pas.
+    dedans = (f'<img class="portrait" src="{p["_photo"]}" alt="">' if p.get("_photo")
+              else f'<div class="mono">{esc(initiales(p))}</div>')
+    portrait = ('<div class="zone-portrait" id="zone-portrait" role="button" tabindex="0" '
+                'title="Cliquer pour choisir une photo sur cet ordinateur">'
+                + dedans + "</div>")
     v = vie(p)
     dates = f'<p class="dates">{esc(v)}</p>' if v else ""
     surnom = f'<p class="surnom">{esc(p["surnom"])}</p>' if p.get("surnom") else ""
@@ -1633,9 +1834,14 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
     for lib, cle in (("Naissance", "naissance"), ("Baptême", "bapteme"),
                      ("Décès", "deces"), ("Sépulture", "sepulture")):
         x = p.get(cle)
+        bout = f'<button type="button" class="b-modif" data-fait="{cle}">modifier</button>'
         if x:
-            L.append(f'<dt>{lib}</dt><dd>{tl(x.get("texte","—"), carte)}{cert_html(x)}'
+            L.append(f'<dt>{lib}</dt><dd>{tl(x.get("texte","—"), carte)}{cert_html(x)}{bout}'
                      + (f'<small>{tl(x["note"], carte)}</small>' if x.get("note") else "") + "</dd>")
+        elif cle == "naissance":
+            # Même sans date connue, la ligne existe : sinon il n'y a rien où
+            # cliquer, et la fonction reste invisible pour qui en aurait besoin.
+            L.append(f'<dt>{lib}</dt><dd><span style="color:var(--faint)">non renseignée</span>{bout}</dd>')
     if p.get("variantes"):
         L.append(f'<dt>Variantes</dt><dd>{esc(", ".join(p["variantes"]))}</dd>')
     if p.get("metiers"):
@@ -1693,6 +1899,22 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
                      + "</dd>")
     ajoute("relations", "Relations", f'<dl class="rel">{"".join(R)}</dl>' if R else "")
 
+    # ---- photos et recettes : toujours là, même vides ----
+    # Une rubrique vide n'est pas un manque : c'est une invitation. C'est
+    # aussi ce qui permet à un parent de savoir qu'il peut verser quelque
+    # chose, sans qu'on ait eu à le lui écrire.
+    ajoute("photos", "Photos",
+           '<div class="vignettes" id="liste-photos"></div>'
+           '<button type="button" class="b-ajout" id="b-photos">'
+           '+ Ajouter des photos</button>'
+           '<p class="note-ajout">Les photos choisies s\'affichent tout de suite. '
+           'Elles ne sont rangées dans le projet qu\'une fois le fichier d\'ajouts '
+           'déposé sur <code>Appliquer_Ajouts.bat</code>.</p>')
+    ajoute("recettes", "Recettes",
+           '<div id="liste-recettes"></div>'
+           '<button type="button" class="b-ajout" id="b-recette">'
+           '+ Ajouter une recette</button>')
+
     # ---- points à vérifier ----
     pbs = [x for x in donnees.get("problemes", []) if pid in (x.get("personnes") or [])]
     if pbs:
@@ -1705,9 +1927,10 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
         ajoute("sources", "Source", f'<p class="src">{esc(" · ".join(p["sources"]))}</p>')
 
     if not p.get("_photo"):
-        corps.append('<p class="src">Pas de portrait. Déposez une image nommée '
-                     f'<code>{esc(pid)}.jpg</code> dans le dossier <code>photos</code>, '
-                     "puis relancez le générateur.</p>")
+        corps.append('<p class="src" id="sans-portrait">Pas encore de portrait. '
+                     "Cliquez sur le rond en haut de la page pour en choisir un sur "
+                     "cet ordinateur — ou déposez une image nommée "
+                     f'<code>{esc(pid)}.jpg</code> dans le dossier <code>photos</code>.</p>")
 
     meta = donnees.get("meta", {})
     pied = (f'Fiche générée le {date_gen} à partir de <strong>{esc(meta.get("titre",""))}</strong>. '
@@ -1722,6 +1945,8 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
             .replace("__SURNOM__", surnom)
             .replace("__JETONS__", jetons)
             .replace("__PIED__", pied)
+            .replace("__PID__", pid)
+            .replace("__NOMJS__", esc(nom_complet(p)).replace('"', "&quot;"))
             .replace("__ARBRE__", nom_arbre)
             .replace("__TITRE_ARBRE__", esc(meta.get("titre", "Arbre généalogique")))
             .replace("__NOM__", esc(nom_complet(p))))
