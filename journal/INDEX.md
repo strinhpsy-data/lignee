@@ -20,3 +20,4 @@ il doit suffire à savoir où regarder.
 | `C-013` | 2026-10-16 | Réparation : générateur cassé par C-012 — valider avant d'écrire | aucun |
 | `C-014` | 2026-10-16 | Interdit 4 amendé (D-004) et serveur local sur 127.0.0.1 | aucun |
 | `C-015` | 2026-10-16 | Interdit sur l'export seul, et rendu mesurable — T-37 à T-40 | **T-37 à T-41 ajoutés**, empreinte reposée |
+| `C-016` | 2026-10-16 | Wilfred n'est qu'un prêt ; l'arbre de Samuel devient le projet ; chaînon manquant trouvé | aucun |

@@ -87,7 +87,7 @@ Toute amélioration, toute correction d'apparence, toute nouvelle fonction. Elle
 | **H-06** | La couche navigateur est facultative : `SAUTE` et non `ECHEC` tant que Playwright manque. |
 | **H-07** | Les contrôles existants sont repris tels quels en `T-01` à `T-36`. |
 | **H-08** | Le prompt de lancement est `D-001` ; la numérotation repart de zéro. |
-| **H-09** | Qwen travaille sur Wilfred ; dellg5 n'est qu'un point d'échange. Seul Wilfred fait foi. |
+| **H-09** | **Corrigée le 2026-10-16.** Le projet vit sur **dellg5** et y restera. Wilfred n'est qu'un **prêt temporaire**, et pour une seule raison : faire exécuter une partie de la programmation par un modèle local, afin d'économiser les jetons mensuels. Ce n'est ni la machine de référence, ni la destination. Un résultat obtenu sur dellg5 fait foi ; un contrôle qui ne passerait que sur Wilfred serait le signe d'un problème, pas d'une preuve. |
 | **H-10** | Aucune dépendance au-delà de Python et de Pillow (facultatif). |
 
 ### doc-v2 — phase 1

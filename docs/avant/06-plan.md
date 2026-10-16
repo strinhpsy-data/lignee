@@ -1,6 +1,8 @@
 # 06 — Plan par phases
 
-Une phase est terminée quand **tous ses tests passent sur Wilfred**, pas quand le code paraît juste.
+Une phase est terminée quand **tous ses tests passent**, pas quand le code paraît juste.
+
+Ils passent sur **dellg5**, la machine du projet. Si une étape a été codée sur Wilfred pendant le prêt, elle revient par le sas et c'est ici qu'elle est reçue : les contrôles navigateur n'y tournent pas, et un harnais à moitié exécuté ne reçoit rien.
 
 ---
 
@@ -204,7 +206,7 @@ trouvée dans le document vietnamien. La chaîne interroge donc l'orientation de
 
 ## Règle commune à toutes les phases
 
-Aucune phase ne commence avant que la précédente soit verte **sur Wilfred**. On ne construit pas sur un étage qui n'a pas été reçu.
+Aucune phase ne commence avant que la précédente soit verte **sur dellg5**, contrôles navigateur compris. On ne construit pas sur un étage qui n'a pas été reçu — et un étage dont la moitié des contrôles ont été sautés n'a pas été reçu.
 
 Et à l'intérieur d'une phase, aucune étape ne commence avant que la précédente
 soit verte. Les étapes de la phase 1 sont ordonnées : le cadrage avant le

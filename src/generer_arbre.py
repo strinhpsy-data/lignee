@@ -4,7 +4,7 @@
 Génère l'arbre généalogique interactif (HTML autonome) à partir du fichier JSON.
 
 Usage :
-    python generer_arbre.py                      -> lit genealogie_jean.json
+    python generer_arbre.py                      -> lit genealogie_samuel.json
     python generer_arbre.py mon_fichier.json     -> lit le fichier indiqué
     (ou glisser-déposer le .json sur Generer_Arbre.bat)
 
@@ -2030,7 +2030,10 @@ def main():
     partage = "--partage" in sys.argv
 
     racine = Path(__file__).resolve().parent.parent   # le script vit dans src/
-    source = Path(args[0]).resolve() if args else racine / "genealogie_jean.json"
+    # L'arbre du projet est celui de Samuel (décision du 2026-10-16). Le
+    # fichier des Jean reste en place, mais il n'est plus la cible par
+    # défaut : c'est une des quatre branches, pas l'arbre.
+    source = Path(args[0]).resolve() if args else racine / "genealogie_samuel.json"
 
     if not source.exists():
         print(f"ERREUR : fichier introuvable -> {source}")

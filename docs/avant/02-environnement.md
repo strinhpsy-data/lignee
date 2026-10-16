@@ -4,7 +4,9 @@
 
 **Wilfred**, poste hors réseau. Aucune connexion, aucun téléchargement possible. Tout ce qui manque doit passer par le sas, à la main, sur clé.
 
-**dellg5** n'est qu'un point d'échange : Claude peut y lire et y exécuter, mais **seul un résultat obtenu sur Wilfred fait foi** (H-09). Un test qui passe sur dellg5 et échoue sur Wilfred, c'est Wilfred qui a raison.
+**dellg5 est la machine du projet**, et le restera (H-09, corrigée le 2026-10-16). C'est là que l'arbre se génère, que les contrôles navigateur tournent pour de vrai, et que les données réelles vivent.
+
+**Wilfred n'est qu'un prêt**, pour une seule raison : y faire exécuter une partie de la programmation par un modèle local et économiser des jetons. Le projet n'a pas vocation à y demeurer. Il s'ensuit que ce qui manque là-bas — Playwright, tesseract, peut-être Git — ne contraint pas le projet : cela contraint seulement ce qu'on peut confier à Qwen pendant le prêt.
 
 ## À constater au démarrage
 

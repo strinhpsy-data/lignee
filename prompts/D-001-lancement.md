@@ -41,7 +41,9 @@ Ne t'acharne pas. Trois tentatives, c'est la limite, et la déclarer n'est pas u
 
 **La phase 0 ne change aucun comportement.** À la fin, `Generer_Arbre.bat` doit produire exactement les mêmes fichiers qu'avant. Si tu repères un défaut, une maladresse ou une amélioration évidente : `Q-xx`, et tu continues. On ne mélange jamais une migration et une amélioration — sinon, quand quelque chose casse, on ne sait plus laquelle des deux en est la cause.
 
-**Les contrôles navigateur peuvent légitimement s'afficher `SAUTE`.** Si Playwright n'est pas installé sur Wilfred, `T-29` à `T-34` sont sautés et le contrat peut quand même atteindre le vert. Ce n'est pas un échec à corriger. N'installe rien : la machine est hors réseau.
+**Les contrôles navigateur s'afficheront `SAUTE` chez toi.** Playwright n'est pas sur Wilfred, donc toute la couche navigateur est sautée et le contrat peut quand même atteindre le vert. Ce n'est pas un échec à corriger, et n'installe rien : la machine est hors réseau.
+
+Mais sache ce que cela veut dire : **ton vert est partiel.** Le vert qui compte est obtenu sur dellg5, où ces contrôles tournent vraiment. Wilfred est un prêt — le projet y passe pour économiser des jetons, il n'y habite pas.
 
 **Si Git manque**, tu peux travailler mais pas commiter, donc ne laisser aucune trace exploitable. Déclare-le en `B-xx` dès la première séance et signale-le clairement.
 
