@@ -40,6 +40,7 @@ GABARIT = r"""<!DOCTYPE html>
   --bg:#f8f5ec; --surface:#fffdf7; --surface-2:#f0e9d9; --surface-3:#e7dec8;
   --ink:#241f17; --muted:#6b6150; --faint:#9b9079;
   --line:#cfc3a9; --line-soft:#e4dbc7;
+  --jean:#2f5d8f; --trinh:#2f7d4f; --gagne:#7c5a86;
   --or:#b4862c; --or-clair:#e0b65c; --or-bg:#f8edd4;
   --fr:#b08a3e; --fr-bg:#f6ecd6;
   --nf:#2f7d4f; --nf-bg:#dff0e4;
@@ -144,19 +145,38 @@ header{
 .plier:hover rect{stroke:var(--or); stroke-width:2}
 .anneau{fill:none; stroke-width:3.2; transition:stroke-width .14s}
 .puce.fr .anneau{stroke:var(--fr)}
+.j-br{font-weight:600}
+.j-jean{background:color-mix(in srgb,var(--jean) 13%,transparent); color:var(--jean)}
+.j-trinh{background:color-mix(in srgb,var(--trinh) 13%,transparent); color:var(--trinh)}
+.j-gagne{background:color-mix(in srgb,var(--gagne) 13%,transparent); color:var(--gagne)}
 .puce.nf .anneau{stroke:var(--nf)}
 .puce.directe .anneau{stroke:var(--or); stroke-width:4.6}
+/* APRÈS « directe », et c'est voulu : la lignée directe garde son anneau
+   épais, mais c'est la BRANCHE qui en donne la couleur. Déclarées avant,
+   ces règles étaient écrasées par la précédente à spécificité égale, et
+   l'arbre sortait tout doré. */
+.puce.br-jean  .anneau{stroke:var(--jean)}
+.puce.br-trinh .anneau{stroke:var(--trinh)}
+.puce.br-gagne .anneau{stroke:var(--gagne)}
+
 .halo{fill:none; stroke:var(--or-clair); stroke-width:1.4; opacity:.55}
 .disque{fill:var(--surface-2)}
 .monogramme{font-size:21px; font-weight:600; fill:var(--faint); letter-spacing:.5px}
 .puce:hover .anneau{stroke:var(--or); stroke-width:5}
 .puce text.nom{font-size:11.4px; font-weight:600; fill:var(--ink)}
 .puce.directe text.nom{fill:var(--or)}
+/* Encore après « directe », pour la même raison que les anneaux. */
+.puce.br-jean  text.nom{fill:var(--jean)}
+.puce.br-trinh text.nom{fill:var(--trinh)}
+.puce.br-gagne text.nom{fill:var(--gagne)}
 .puce text.vie{font-size:9.8px; fill:var(--muted); font-variant-numeric:tabular-nums}
 .puce.selectionne .anneau{stroke:var(--alerte); stroke-width:5}
 .puce.eteint{opacity:.17}
 .puce.trouve .anneau{stroke:var(--alerte); stroke-width:5}
-.puce.detache .anneau{stroke-dasharray:6 5}
+/* Trait plein, même pour un noeud rattaché autrement. Les pointillés
+   n'ajoutaient rien que la pastille rouge ne dise déjà, et ils donnaient à
+   une moitié de l'arbre l'air d'être en sursis. */
+.puce.detache .anneau{stroke-dasharray:none}
 
 /* ---------- fiches (second mode) ---------- */
 .puce rect.cadre{
@@ -166,7 +186,7 @@ header{
 .puce:hover rect.cadre{stroke:var(--or); stroke-width:2}
 .puce.directe rect.cadre{stroke:var(--or); stroke-width:2; fill:var(--or-bg)}
 .puce.ancetre rect.cadre{stroke-width:3}
-.puce.detache rect.cadre{stroke-dasharray:5 4}
+.puce.detache rect.cadre{stroke-dasharray:none}
 .puce.selectionne rect.cadre{stroke:var(--alerte); stroke-width:3}
 .puce.trouve rect.cadre{stroke:var(--alerte); stroke-width:2.6}
 .puce rect.bande{rx:2}
@@ -364,9 +384,54 @@ function construire(idPivot, vu){
   return { id:idPivot, conjoints, groupes,
            enfants: groupes.reduce((a,g)=>a.concat(g.enfants),[]) };
 }
+/* ---------------- parcours vers le haut ----------------
+   Miroir de construire(). Là où l'autre prend les enfants d'une union,
+   celui-ci prend les conjoints de l'union PARENTE. L'index unionParente
+   était déjà construit plus haut depuis le premier jour : le lien de
+   filiation existait dans les deux sens, personne ne l'avait jamais
+   remonté.
+
+   C'est ce parcours qui relie les deux lignées. Un moteur qui ne sait que
+   descendre atteint Sébastien par les Jean ET par les Trịnh, et le dessine
+   deux fois — chaque racine ayant son propre ensemble « vu ». En montant
+   depuis une seule personne, chacun n'est atteint qu'une fois, et les deux
+   familles se rejoignent d'elles-mêmes à l'endroit où elles se sont
+   effectivement rencontrées. */
+function construireHaut(id, vu, branche){
+  vu = vu || new Set();
+  if(vu.has(id)) return null;
+  vu.add(id);
+  const u = unionParente[id];
+  const parents = (u ? u.conjoints : []).filter(c=>!vu.has(c));
+  const noeud = { id, conjoints: [], groupes: [], enfants: [], branche };
+  if(branche) BRANCHE_PERS[id] = branche;
+  if(u && parents.length){
+    const sous = parents.map(p=>construireHaut(p, vu, BRANCHE_DE[p] || branche))
+                        .filter(Boolean);
+    if(sous.length){
+      noeud.groupes.push({union:u, enfants:sous});
+      noeud.enfants = sous;
+    }
+  }
+  return noeud;
+}
+
+/* Quelle branche pour qui : déclaré dans meta.branches, jamais deviné. La
+   branche se propage ensuite vers le haut, de tête en ancêtre. */
+const BRANCHE_DE = {};
+((D.meta&&D.meta.branches)||[]).forEach(b=>{ BRANCHE_DE[b.tete] = b.id; });
+
+const BRANCHE_PERS = {};
+const BRANCHE_NOM = {};
+((D.meta&&D.meta.branches)||[]).forEach(b=>{ BRANCHE_NOM[b.id] = b.titre || b.id; });
+const MONTANT = !!(D.meta && D.meta.pivot && P[D.meta.pivot]);
 const racines = [];
-(D.racines||[]).forEach(rid=>{ const u = U.find(x=>x.id===rid); if(u) racines.push(construire(u.conjoints[0])); });
-(D.detaches||[]).forEach(pid=>{ racines.push(construire(pid)); });
+if(MONTANT){
+  racines.push(construireHaut(D.meta.pivot, null, null));
+}else{
+  (D.racines||[]).forEach(rid=>{ const u = U.find(x=>x.id===rid); if(u) racines.push(construire(u.conjoints[0])); });
+  (D.detaches||[]).forEach(pid=>{ racines.push(construire(pid)); });
+}
 const principal = racines[0];
 const detaches = racines.slice(1);
 
@@ -387,7 +452,12 @@ const detaches = racines.slice(1);
    couple de tête et à son compte : la page d'ouverture devient l'index des
    familles, et l'index est le même objet que l'arbre. Un clic ouvre celle
    qu'on veut. */
-const PROFONDEUR_INITIALE = racines.length > 3 ? 0 : 2;
+/* Combien de générations ouvertes d'emblée. En montant, c'est le nombre de
+   crans au-dessus du pivot qu'on veut voir sans rien cliquer : meta.profondeur_ouverte.
+   Par défaut 3 — l'enfant, ses parents, ses grands-parents. */
+const PROFONDEUR_INITIALE = MONTANT
+  ? ((D.meta && D.meta.profondeur_ouverte) || 3)
+  : (racines.length > 3 ? 0 : 2);
 
 function preparer(n, prof){
   n.total = 0;
@@ -439,12 +509,24 @@ const ancNode = (function t(n){ if(P[n.id]&&P[n.id].ancetre) return n;
 /* ======================= dimensions ======================= */
 /* portraits : de haut en bas, médaillons ronds */
 const RAYON=34, MED_L=118, MED_H=118, MED_EP=18, MED_EF=22, MED_NIV=168;
+/* +1 : les enfants sous les parents. -1 : les parents au-dessus de l'enfant.
+   La disposition est la même ; seul le signe de l'axe change. */
+const SENS = MONTANT ? -1 : 1;
 /* fiches : de gauche à droite, cartes */
 const FIC_L=184, FIC_H=62, FIC_EP=8, FIC_EF=16, FIC_COL=282;
 
 let mode = "portraits";
 
 /* ======================= mise en page ======================= */
+function poserPuces(n){
+  /* Un noeud montant est UNE personne. Les deux parents sont deux noeuds
+     frères et non deux puces d'un même noeud : c'est ce qui permet de
+     remonter séparément dans chacune des deux familles. */
+  if(!n.puces) n.puces = [{id:n.id}];
+  (n.enfants||[]).forEach(poserPuces);
+}
+if(MONTANT) racines.filter(Boolean).forEach(poserPuces);
+
 function taillePuces(n, pas, ecart){ const k=1+n.conjoints.length; return k*pas + (k-1)*ecart; }
 
 /* -- portraits : l'axe principal est horizontal, les générations descendent -- */
@@ -460,7 +542,7 @@ function placerV(n, gauche, y){
   if(!enf(n).length){ n.debut = gauche + (n.taille-lp)/2; }
   else{
     let cx = gauche + (n.taille - n.tailleEnfants)/2;
-    enf(n).forEach((e,i)=>{ if(i) cx += MED_EF; placerV(e, cx, y+MED_NIV); cx += e.taille; });
+    enf(n).forEach((e,i)=>{ if(i) cx += MED_EF; placerV(e, cx, y+SENS*MED_NIV); cx += e.taille; });
     const a=enf(n)[0], b=enf(n)[enf(n).length-1];
     const c=(a.pivot+b.pivot)/2;
     n.debut = Math.min(Math.max(c-lp/2, gauche), gauche+n.taille-lp);
@@ -550,7 +632,13 @@ function vie(p){
   if(n&&d) return g+n+" – "+h+d;
   if(n) return g+n+" –"; if(d) return "– "+h+d; return "";
 }
-function nomComplet(p){ return ((p.prenom||"")+" "+(p.nom||"")).trim(); }
+/* « nom_affiche » l'emporte quand il existe. En vietnamien le nom de
+   famille précède le prénom : Trần Thị Tịch, et non « Thị Tịch Trần ».
+   Imposer l'ordre occidental à un nom vietnamien le rend méconnaissable
+   pour ceux à qui on l'enverra. */
+function nomComplet(p){
+  return (p.nom_affiche || ((p.prenom||"")+" "+(p.nom||""))).trim();
+}
 function initiales(p){
   /* Ne garder que des lettres. « Jos (Joseph) Pitre » donnait « J( » :
      la parenthèse comptait comme initiale du nom. */
@@ -581,9 +669,22 @@ function couper(txt, maxCar, maxLignes){
 
 let couchLiens, couchPuces, indexPuces={};
 
-function puceMedaillon(id,x,y,directe,detache){
+/* La classe d'un médaillon. Quand une branche est déclarée, c'est elle qui
+   donne la couleur ; « pays » — resté en France / passé en Nouvelle-France —
+   ne sert plus qu'aux arbres d'une seule origine. Ce vocabulaire-là ne veut
+   rien dire pour une aïeule née à Saïgon : la fiche de Diên Thị Trần
+   affichait « France », simplement parce que le champ manquait et que le
+   défaut tombait sur « fr ». */
+function classePuce(p, directe, detache, branche){
+  const base = branche ? ("br-" + branche) : (p.pays || "fr");
+  return "puce " + base + (directe ? " directe" : "")
+       + (p.ancetre ? " ancetre" : "")
+       + (detache && !MONTANT ? " detache" : "");
+}
+
+function puceMedaillon(id,x,y,directe,detache,branche){
   const p=P[id]; if(!p) return;
-  const g=el("g",{class:"puce "+(p.pays||"fr")+(directe?" directe":"")+(detache?" detache":""),
+  const g=el("g",{class:classePuce(p,directe,detache,branche),
                   transform:`translate(${x},${y})`,"data-id":id});
   const cx=MED_L/2, cy=RAYON+4;
   if(p._photo){
@@ -623,9 +724,9 @@ function puceMedaillon(id,x,y,directe,detache){
   couchPuces.appendChild(g); indexPuces[id]=g;
 }
 
-function puceFiche(id,x,y,directe,detache){
+function puceFiche(id,x,y,directe,detache,branche){
   const p=P[id]; if(!p) return;
-  const g=el("g",{class:"puce "+(p.pays||"fr")+(directe?" directe":"")+(p.ancetre?" ancetre":"")+(detache?" detache":""),
+  const g=el("g",{class:classePuce(p,directe,detache,branche),
                   transform:`translate(${x},${y})`,"data-id":id});
   g.appendChild(el("rect",{class:"cadre",x:0,y:0,width:FIC_L,height:FIC_H}));
   g.appendChild(el("rect",{class:"bande",x:0,y:9,width:3.5,height:FIC_H-18}));
@@ -679,7 +780,7 @@ function bouton(n, cx, cy){
 
 function dessinerV(n, detache){
   n.puces.forEach((pu,i)=>{
-    puceMedaillon(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache);
+    puceMedaillon(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache, n.branche);
     if(i>0){
       const u=pu.union||{}, d=!!u.lignee;
       const ym=pu.y+RAYON+4;
@@ -690,12 +791,14 @@ function dessinerV(n, detache){
         t.textContent=lab[1]; couchLiens.appendChild(t); }
     }
   });
-  if(n.total) bouton(n, n.pivot, n.y+MED_H+10);
+  if(n.total) bouton(n, n.pivot, SENS>0 ? n.y+MED_H+10 : n.y-26);
   grp(n).forEach((gr,gi)=>{
     if(!gr.enfants.length) return;
     const idx=n.puces.findIndex(pu=>pu.union===gr.union);
     const xa=n.pivot, xb=idx>0?n.puces[idx].x+MED_L/2:xa;
-    const xU=(xa+xb)/2, yDep=n.y+MED_H+4, yBus=n.y+MED_H+26+gi*10;
+    const xU=(xa+xb)/2;
+    const yDep = SENS>0 ? n.y+MED_H+4  : n.y-4;
+    const yBus = SENS>0 ? n.y+MED_H+26+gi*10 : n.y-26-gi*10;
     const d=!!gr.union.lignee, cls="lien"+(d?" directe":"");
     couchLiens.appendChild(el("path",{class:cls,d:`M ${xU} ${yDep} V ${yBus}`}));
     const xs=gr.enfants.map(e=>e.pivot);
@@ -703,7 +806,7 @@ function dessinerV(n, detache){
     gr.enfants.forEach(e=>{
       const de=!!(P[e.id]&&P[e.id].lignee)&&d;
       couchLiens.appendChild(el("path",{class:"lien"+(de?" directe":""),
-        d:`M ${e.pivot} ${yBus} V ${e.y+4}`}));
+        d:`M ${e.pivot} ${yBus} V ${SENS>0 ? e.y+4 : e.y+MED_H-4}`}));
       dessinerV(e, detache);
     });
   });
@@ -711,7 +814,7 @@ function dessinerV(n, detache){
 
 function dessinerH(n, detache){
   n.puces.forEach((pu,i)=>{
-    puceFiche(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache);
+    puceFiche(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache, n.branche);
     if(i>0){
       const u=pu.union||{}, d=!!u.lignee, xm=n.x+24;
       const y1=n.puces[i-1].y+FIC_H, y2=pu.y;
@@ -859,9 +962,15 @@ function ouvrirFiche(id){
   selection=id;
   if(indexPuces[id]) indexPuces[id].classList.add("selectionne");
 
-  let jet = p.pays==="nf"?`<span class="jeton j-nf">Nouvelle-France</span>`
-                         :`<span class="jeton j-fr">France</span>`;
+  /* Le jeton de pays ne s'affiche que si le champ existe VRAIMENT. Avant,
+     son absence retombait sur « France », et la fiche d'une aïeule née à
+     Saïgon annonçait qu'elle était restée en France. Un défaut par omission
+     affirme quelque chose de faux, ce qui est pire que de ne rien dire. */
+  let jet = p.pays==="nf" ? `<span class="jeton j-nf">Nouvelle-France</span>`
+          : p.pays==="fr" ? `<span class="jeton j-fr">France</span>` : "";
   if(p.ancetre) jet+=`<span class="jeton j-or">Ancêtre canadien</span>`;
+  const brid = BRANCHE_PERS[id]; const brnom = brid && BRANCHE_NOM[brid];
+  if(brnom) jet = `<span class="jeton j-br j-${brid}">${brnom}</span>` + jet;
   else if(p.lignee) jet+=`<span class="jeton j-or">Lignée directe</span>`;
   if(p.lacune) jet+=`<span class="jeton j-al">Rattachement non documenté</span>`;
   if((p.sections||[]).some(s=>s.prive)) jet+=`<span class="jeton j-al">Confidentiel</span>`;
@@ -1168,6 +1277,7 @@ GABARIT_PAGE = r"""<!DOCTYPE html>
   --bg:#f8f5ec; --surface:#fffdf7; --surface-2:#f0e9d9;
   --ink:#241f17; --muted:#6b6150; --faint:#9b9079;
   --line:#cfc3a9; --line-soft:#e4dbc7;
+  --jean:#2f5d8f; --trinh:#2f7d4f; --gagne:#7c5a86;
   --or:#b4862c; --or-bg:#f8edd4;
   --fr:#b08a3e; --fr-bg:#f6ecd6;
   --nf:#2f7d4f; --nf-bg:#dff0e4;
@@ -1311,7 +1421,9 @@ def esc(s):
 
 
 def nom_complet(p):
-    return ((p.get("prenom") or "") + " " + (p.get("nom") or "")).strip()
+    # « nom_affiche » l'emporte : en vietnamien le nom précède le prénom.
+    return (p.get("nom_affiche")
+            or ((p.get("prenom") or "") + " " + (p.get("nom") or ""))).strip()
 
 
 def initiales(p):
@@ -1489,8 +1601,10 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
     carte = donnees.get("meta", {}).get("carte")
 
     # ---- bandeaux d'identité ----
+    # Même règle que sur la carte flottante : pas de champ, pas de jeton.
     jetons = ('<span class="jeton j-nf">Nouvelle-France</span>' if p.get("pays") == "nf"
-              else '<span class="jeton j-fr">France</span>')
+              else '<span class="jeton j-fr">France</span>' if p.get("pays") == "fr"
+              else "")
     if p.get("ancetre"):
         jetons += '<span class="jeton j-or">Ancêtre canadien</span>'
     elif p.get("lignee"):
