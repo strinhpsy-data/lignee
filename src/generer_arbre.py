@@ -22,11 +22,13 @@ import base64
 import io
 import json
 import mimetypes
+import re
 import sys
 from pathlib import Path
 
 EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff")
 COTE_MAX = 420          # pixels : taille maximale du portrait intégré
+COTE_GALERIE = 1400     # pixels : plus grand côté d'une photo de galerie
 QUALITE = 82
 
 GABARIT = r"""<!DOCTYPE html>
@@ -245,6 +247,14 @@ header{
 .f-corps > .f-note:first-of-type{margin-top:12px; padding-top:8px}
 .f-bas{padding:10px 15px 12px; border-top:1px solid var(--line-soft);
   display:flex; align-items:center; gap:10px; background:var(--surface)}
+.f-modifiable{cursor:pointer; transition:filter .12s, box-shadow .12s}
+.f-modifiable:hover{filter:brightness(.82); box-shadow:0 0 0 3px var(--or)}
+#avis-arbre{position:fixed; left:50%; bottom:22px; transform:translate(-50%,16px); opacity:0;
+  pointer-events:none; transition:opacity .18s, transform .18s; z-index:80;
+  background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:9px; font-size:14px;
+  max-width:min(560px, calc(100vw - 32px))}
+#avis-arbre.visible{opacity:1; transform:translate(-50%,0)}
+#avis-arbre.erreur{background:var(--alerte); color:#fff}
 .f-plus{font-size:12.7px; font-weight:600; color:var(--or); text-decoration:none;
   display:inline-flex; align-items:center; gap:5px}
 .f-plus:hover{text-decoration:underline; text-underline-offset:2px}
@@ -664,9 +674,11 @@ function anneeDe(f){ if(!f) return null;
   if(typeof f.tri==="number") return f.tri;
   const m=(f.texte||"").match(/(1[5-9]\d{2})/); return m?+m[1]:null; }
 function vie(p){
-  const n=anneeDe(p.naissance)||anneeDe(p.bapteme), d=anneeDe(p.deces)||anneeDe(p.sepulture);
+  /* le « ~ » suit la date affichée, pas sa voisine (C-021) */
+  const fn=anneeDe(p.naissance)?p.naissance:p.bapteme, fd=anneeDe(p.deces)?p.deces:p.sepulture;
+  const n=anneeDe(fn), d=anneeDe(fd);
   const ap=f=>f&&(f.certitude==="approximative"||f.certitude==="deduite");
-  const g=(ap(p.naissance)||ap(p.bapteme))?"~":"", h=(ap(p.deces)||ap(p.sepulture))?"~":"";
+  const g=ap(fn)?"~":"", h=ap(fd)?"~":"";
   if(n&&d) return g+n+" – "+h+d;
   if(n) return g+n+" –"; if(d) return "– "+h+d; return "";
 }
@@ -1051,7 +1063,12 @@ function ouvrirFiche(id){
     +enf.map(e=>`<span class="lien-pers" data-va="${ech2(e)}">${ech2((P[e]||{}).prenom||e)}</span>`).join(", ")
     +`</dd>`);
 
-  const marq=p.marquants||[];
+  /* Les faits rattachés à plusieurs personnes (C-021) passent avant les
+     mentions lues dans les sources, en ordre de date. */
+  const evs=(D.evenements||[]).filter(e=>(e.personnes||[]).includes(id))
+    .sort((a,b)=>(a.tri||9999)-(b.tri||9999));
+  const marq=evs.map(e=>(e.date?`<b>${ech2(e.date)}</b> — `:"")+tl(e.texte)+cert(e))
+    .concat((p.marquants||[]).map(m=>tl(m)));
   const pbs=(D.problemes||[]).filter(x=>(x.personnes||[]).includes(id));
 
   /* ce qui attend derrière « En savoir plus » */
@@ -1073,7 +1090,7 @@ function ouvrirFiche(id){
     +`</div><button class="f-fermer" title="Fermer">&times;</button></div>`
     +`<div class="f-corps"><div>${jet}</div>`
     +(L.length?`<dl class="f-faits">${L.join("")}</dl>`:"")
-    +(marq.length?`<ul class="f-marquants">${marq.map(m=>`<li>${tl(m)}</li>`).join("")}</ul>`:"")
+    +(marq.length?`<ul class="f-marquants">${marq.map(m=>`<li>${m}</li>`).join("")}</ul>`:"")
     +pbs.map(x=>`<div class="f-note"><b>${ech2(x.type)} · p. ${ech2(x.pages||"?")}</b>${tl(x.description)}</div>`).join("")
     +`</div>`
     +`<div class="f-bas"><a class="f-plus" href="__DOSSIER_FICHES__/${encodeURIComponent(id)}.html" target="_blank" rel="noopener">En savoir plus</a>`
@@ -1081,6 +1098,12 @@ function ouvrirFiche(id){
     +`</div>`;
 
   boiteFiche.querySelector(".f-fermer").onclick=e=>{ e.stopPropagation(); fermerFiche(); };
+  if(JETON_EDITION){
+    const z=boiteFiche.querySelector(".f-portrait, .f-mono");
+    z.classList.add("f-modifiable");
+    z.title="Cliquer pour choisir une autre photo";
+    z.onclick=e=>{ e.stopPropagation(); choisirPortrait(id); };
+  }
   boiteFiche.querySelectorAll(".lien-pers").forEach(a=>a.addEventListener("click",e=>{
     e.stopPropagation();
     const w=a.getAttribute("data-va");
@@ -1268,7 +1291,66 @@ document.addEventListener("keydown",e=>{
   if(e.key==="/"&&document.activeElement!==rech){ e.preventDefault(); rech.focus(); }
 });
 
+/* ======================= modification directe ======================= */
+/* Servi par Serveur_Local.bat, l'arbre se modifie : un clic sur le visage
+   dans la carte, on choisit une image, le serveur la range, refait l'arbre,
+   et la page revient au même endroit, la même carte ouverte. Ouvert par
+   double-clic, rien de tout cela n'existe : il ne demande rien à personne. */
+const SOURCE_DONNEES="__SOURCE__";
+let JETON_EDITION=null;
+const fPortraitArbre=document.createElement("input");
+fPortraitArbre.type="file"; fPortraitArbre.accept="image/*"; fPortraitArbre.hidden=true;
+document.body.appendChild(fPortraitArbre);
+let portraitPour=null;
+function choisirPortrait(id){ portraitPour=id; fPortraitArbre.value=""; fPortraitArbre.click(); }
+function garderVue(){
+  try{ sessionStorage.setItem("vue-arbre", JSON.stringify({sel:selection, tx, ty, ech, mode})); }catch(e){}
+}
+function avis(txt, erreur){
+  let t=document.getElementById("avis-arbre");
+  if(!t){ t=document.createElement("div"); t.id="avis-arbre"; document.body.appendChild(t); }
+  t.textContent=txt; t.className="visible"+(erreur?" erreur":"");
+  clearTimeout(t._m); t._m=setTimeout(()=>t.className="", erreur?8000:2600);
+}
+fPortraitArbre.addEventListener("change",()=>{
+  const f=fPortraitArbre.files[0], id=portraitPour; if(!f||!id) return;
+  const l=new FileReader();
+  l.onload=()=>{
+    avis("Enregistrement du portrait…");
+    fetch("/_modifier",{method:"POST",headers:{"Content-Type":"application/json","X-Jeton":JETON_EDITION},
+      body:JSON.stringify({op:"portrait",source:SOURCE_DONNEES,pid:id,donnee:l.result})})
+     .then(r=>r.json()).then(o=>{
+       if(o&&o.ok){ garderVue(); try{ sessionStorage.setItem("avis-arbre", o.message); }catch(e){} location.reload(); }
+       else avis("Non enregistré : "+((o&&o.erreur)||"raison inconnue"), true);
+     }).catch(()=>avis("Le serveur ne répond plus : rien n'a été enregistré.", true));
+  };
+  l.readAsDataURL(f);
+});
+if(location.protocol==="http:"||location.protocol==="https:"){
+  fetch("/_jeton").then(r=>r.ok?r.json():null).then(o=>{
+    if(!o||!o.jeton) return;
+    JETON_EDITION=o.jeton;
+    document.body.classList.add("edition");
+    if(selection) ouvrirFiche(selection);
+    /* Une fiche modifiée dans un autre onglet : l'arbre se refait aussi. */
+    try{ new BroadcastChannel("arbre-maj").onmessage=m=>{
+      if(m.data&&m.data.source===SOURCE_DONNEES){ garderVue(); location.reload(); } }; }catch(e){}
+  }).catch(()=>{});
+}
+
 rendre(false);
+/* Retour après une modification : même vue, même carte ouverte. */
+(function reprendre(){
+  let v=null;
+  try{ v=JSON.parse(sessionStorage.getItem("vue-arbre")||"null"); sessionStorage.removeItem("vue-arbre"); }catch(e){}
+  if(!v) return;
+  if(v.mode&&v.mode!==mode) setMode(v.mode);
+  if(v.sel&&indexNoeuds[v.sel]&&!indexPuces[v.sel]){ ouvrirChemin(v.sel); rendre(true); }
+  if([v.tx,v.ty,v.ech].every(Number.isFinite)){ tx=v.tx; ty=v.ty; ech=v.ech; appliquer(); }
+  if(v.sel&&P[v.sel]) ouvrirFiche(v.sel);
+  try{ const m=sessionStorage.getItem("avis-arbre"); if(m){ sessionStorage.removeItem("avis-arbre");
+    avis(m.charAt(0).toUpperCase()+m.slice(1)+"."); } }catch(e){}
+})();
 </script>
 </body>
 </html>
@@ -1279,8 +1361,10 @@ def charger_photo(chemin: Path):
     """Lit une image, la réduit si possible, renvoie une URI data:."""
     donnees = chemin.read_bytes()
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
         im = Image.open(io.BytesIO(donnees))
+        im.draft("RGB", (COTE_MAX * 2, COTE_MAX * 2))   # décodage JPEG réduit : bien plus rapide
+        im = ImageOps.exif_transpose(im)     # une photo de téléphone couchée se redresse
         im = im.convert("RGB")
         # recadrage carré centré, puis réduction
         c = min(im.size)
@@ -1295,6 +1379,36 @@ def charger_photo(chemin: Path):
     except Exception:
         mt = mimetypes.guess_type(chemin.name)[0] or "image/jpeg"
         return "data:" + mt + ";base64," + base64.b64encode(donnees).decode(), len(donnees)
+
+
+def charger_image(chemin: Path, cote=COTE_GALERIE):
+    """Une photo de galerie : entière (pas de recadrage), réduite à « cote »
+    pixels au plus grand côté."""
+    donnees = chemin.read_bytes()
+    try:
+        from PIL import Image, ImageOps
+        im = Image.open(io.BytesIO(donnees))
+        im.draft("RGB", (cote, cote))
+        im = ImageOps.exif_transpose(im).convert("RGB")
+        im.thumbnail((cote, cote), Image.LANCZOS)
+        tampon = io.BytesIO()
+        im.save(tampon, format="JPEG", quality=84, optimize=True)
+        return "data:image/jpeg;base64," + base64.b64encode(tampon.getvalue()).decode()
+    except Exception:
+        mt = mimetypes.guess_type(chemin.name)[0] or "image/jpeg"
+        return "data:" + mt + ";base64," + base64.b64encode(donnees).decode()
+
+
+def photos_galerie(dossier: Path, pid: str):
+    """Les photos de galerie : « <id>-<n>.<ext> », en ordre numérique. Le
+    nom nu est réservé au portrait (C-017)."""
+    motif = re.compile(re.escape(pid) + r"-(\d+)(\.[A-Za-z]+)$")
+    trouvees = []
+    for f in dossier.iterdir():
+        m = motif.match(f.name)
+        if m and f.is_file() and f.suffix.lower() in EXTENSIONS:
+            trouvees.append((int(m.group(1)), f))
+    return [f for _, f in sorted(trouvees)]
 
 
 def trouver_photo(dossier: Path, pid: str, nom_declare=None):
@@ -1458,6 +1572,70 @@ textarea.saisie{min-height:110px; line-height:1.55; resize:vertical}
 .barre-ajouts .quoi{color:var(--muted)}
 .note-ajout{font-size:12.4px; color:var(--faint); line-height:1.55; margin:9px 0 0;
   font-style:italic}
+/* ---- modification sur place (C-021) ---- */
+[hidden]{display:none !important}
+.vide-edition, .b-plus-ed, .crayon{display:none}
+body.edition .vide-edition{display:revert}
+body.edition .b-plus-ed{display:inline-block}
+body.edition .ed, body.ajouts [data-ed="fait"]{cursor:pointer; position:relative; border-radius:6px;
+  transition:background-color .12s}
+body.edition .ed:hover, body.ajouts [data-ed="fait"]:hover{
+  background:color-mix(in srgb, var(--or) 9%, transparent);
+  box-shadow:0 0 0 5px color-mix(in srgb, var(--or) 9%, transparent)}
+body.edition .crayon, body.ajouts [data-ed="fait"] .crayon{display:inline-block; border:0;
+  background:transparent; color:var(--faint); font:inherit; font-size:13px; cursor:pointer;
+  margin-left:7px; padding:0 3px; opacity:.45; vertical-align:1px}
+body.edition .ed:hover > .crayon, body.ajouts [data-ed="fait"]:hover > .crayon,
+.crayon:focus-visible{opacity:1; color:var(--or)}
+@media (hover:none){ body.edition .crayon{opacity:.8} }
+.en-edition{background:transparent !important; box-shadow:none !important; cursor:default !important}
+.en-edition > :not(.editeur){display:none !important}
+.v.vide{color:var(--faint); font-style:italic}
+.en-attente{font-size:10px; font-weight:700; color:var(--or); background:var(--or-bg);
+  padding:1.5px 6px; border-radius:4px; margin-left:7px; font-style:normal}
+.liste-ed{list-style:none; margin:0; padding:0}
+.liste-ed li{margin:0 0 3px}
+.liste-ed.puces{list-style:disc; padding-left:19px; font-size:14.8px}
+.liste-ed.puces li{margin-bottom:8px; line-height:1.55}
+.b-plus-ed{border:0; background:transparent; color:var(--or); font:inherit; font-size:12.6px;
+  padding:3px 0; cursor:pointer; font-weight:600}
+.b-plus-ed:hover{text-decoration:underline; text-underline-offset:2px}
+.editeur{display:block; margin:6px 0 10px; padding:13px 14px; border:1px solid var(--or);
+  border-radius:9px; background:var(--surface); box-shadow:0 4px 18px color-mix(in srgb,var(--ink) 10%,transparent);
+  max-width:620px; cursor:default; font-size:14px; text-transform:none; letter-spacing:0; font-weight:400}
+.ed-champ{display:block; margin:0 0 9px}
+.ed-champ > span{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.7px;
+  color:var(--faint); font-weight:700; margin:0 0 4px}
+.editeur .saisie{min-width:0; width:100%; margin:0}
+.editeur select.saisie{width:auto}
+.ed-note{font-size:12.6px; color:var(--muted); margin:0 0 10px; line-height:1.5}
+.ed-boutons{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.ed-ok, .ed-non, .ed-retirer, .b-petit{font:inherit; font-size:13px; border-radius:7px;
+  padding:6px 13px; cursor:pointer}
+.ed-ok{border:0; background:var(--or); color:#fff; font-weight:600}
+.ed-non{border:1px solid var(--line); background:transparent; color:var(--muted)}
+.ed-retirer{border:1px solid var(--alerte); background:transparent; color:var(--alerte); margin-left:auto}
+.ed-retirer:hover{background:var(--alerte-bg)}
+.b-petit{border:1px solid var(--line); background:transparent; color:var(--muted); font-size:12px;
+  padding:3px 10px; margin-top:6px}
+.b-petit:hover{border-color:var(--alerte); color:var(--alerte)}
+.choix-pers .cp-puces{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 7px}
+.cp-puce{background:var(--or-bg); color:var(--ink); border-radius:99px; padding:2px 4px 2px 11px; font-size:13px}
+.cp-puce button{border:0; background:transparent; color:var(--muted); cursor:pointer; font:inherit; padding:0 5px}
+.cp-puce button:hover{color:var(--alerte)}
+ul.marquants li.ev small, ul.marquants li small{display:block; color:var(--muted); font-size:12.8px; margin-top:2px}
+.ev-date{display:block; font-size:11.4px; color:var(--faint); font-variant-numeric:tabular-nums; letter-spacing:.3px}
+.ev-src{font-style:italic}
+figure.vignette{margin:0}
+figure.vignette img{display:block}
+figure.vignette figcaption{font-size:12.4px; color:var(--muted); line-height:1.4; margin-top:5px}
+.toast{position:fixed; left:50%; bottom:22px; transform:translate(-50%, 16px); opacity:0;
+  pointer-events:none; transition:opacity .18s, transform .18s; z-index:60; max-width:min(560px, calc(100vw - 32px));
+  background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:9px; font-size:14px; line-height:1.45;
+  box-shadow:0 6px 26px color-mix(in srgb,var(--ink) 25%,transparent)}
+.toast.visible{opacity:1; transform:translate(-50%, 0)}
+.toast.erreur{background:var(--alerte); color:#fff}
+body.edition .note-fichier{display:none}
 .rel{display:grid; grid-template-columns:auto 1fr; gap:9px 18px; font-size:14.6px; margin:0}
 .rel dt{color:var(--faint); font-size:10.5px; text-transform:uppercase; letter-spacing:.7px;
   font-weight:700; padding-top:3px; white-space:nowrap}
@@ -1471,7 +1649,7 @@ footer{border-top:1px solid var(--line-soft); margin:46px 0 0; padding:18px 0 0;
 </style>
 </head>
 <body>
-<div class="bandeau"><a class="retour" href="../__ARBRE__">&larr; L'arbre</a><span class="fil">__TITRE_ARBRE__</span></div>
+<div class="bandeau"><a class="retour" href="../__ARBRE__">&larr; L'arbre</a><span class="fil">__TITRE_ARBRE__</span>__BOUTON_ADMIN__</div>
 <main>
   <nav class="cote">__COTE__</nav>
   <div class="colonne">
@@ -1484,217 +1662,483 @@ footer{border-top:1px solid var(--line-soft); margin:46px 0 0; padding:18px 0 0;
 </main>
 <div class="barre-ajouts" id="barre"><span class="quoi" id="quoi"></span>
   <button type="button" id="b-enregistrer">Enregistrer mes ajouts</button></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+__DIALOGUE_ADMIN__
 <input type="file" id="f-portrait" accept="image/*" hidden>
 <input type="file" id="f-photos" accept="image/*" multiple hidden>
 <script>
+"use strict";
 /* ===================================================================
-   AJOUTS — portrait, dates, photos, recettes.
+   MODIFIER UNE FICHE — C-021.
 
-   Une page ouverte en « file:// » NE PEUT PAS écrire sur le disque :
-   c'est une barrière du navigateur, pas une limite de ce code. Elle peut
-   en revanche lire un fichier que vous choisissez, l'afficher tout de
-   suite, et vous rendre un seul fichier d'ajouts.
+   DEUX CHEMINS, UNE SEULE PAGE. C'est la page qui constate comment elle a
+   été ouverte, et non deux versions à maintenir : deux versions
+   divergeraient, et c'est celle qu'on teste le moins qui partirait chez la
+   parenté.
 
-   Ce fichier se dépose ensuite sur « Appliquer_Ajouts.bat », qui range les
-   photos et verse les textes dans les données. Aucun serveur, aucun réseau,
-   et la page reste lisible par un parent sur n'importe quelle machine.
+   Servie par Serveur_Local.bat : on clique sur une valeur, on corrige, on
+   enregistre — le serveur écrit les données, refait l'arbre, et la page se
+   recharge d'elle-même. Rien n'attend, il n'y a pas de bouton « Enregistrer
+   mes ajouts ».
+
+   Ouverte par double-clic (« file:// ») : une page ne peut pas écrire sur
+   le disque. Elle garde alors le chemin d'origine : portrait, dates,
+   photos et recettes s'accumulent, et « Enregistrer mes ajouts » rend un
+   fichier à déposer sur Appliquer_Ajouts.bat. C'est le chemin de la
+   parenté ; le contrôle T-40 le garde.
    =================================================================== */
-const PID = "__PID__", PNOM = "__NOMJS__";
-const AJOUTS = {id:PID, nom:PNOM, portrait:null, faits:{}, photos:[], recettes:[]};
-const CLE = "ajouts:" + PID;
+const PID = "__PID__", PNOM = "__NOMJS__", SOURCE = "__SOURCE__";
+const PERSONNES = __PERSONNES__;            /* [id, nom, années] */
+const NOMS = {}; PERSONNES.forEach(x=>{ NOMS[x[0]] = x; });
+const SERVIE = location.protocol === "http:" || location.protocol === "https:";
+const CERTS = [["", "selon la saisie"], ["attestee", "attestée"],
+  ["approximative", "approximative"], ["deduite", "déduite"],
+  ["divergente", "divergente"], ["incoherente", "incohérente"], ["inconnue", "inconnue"]];
+let JETON = null;
+/* Ce qu'une couche optionnelle peut ajouter aux envois (en-têtes) et à
+   l'affichage. Vide par défaut. */
+const EXTRA = {entetes:()=>({}), apresChargement:()=>{}, indice:()=>"",
+  noteAttestee:"Fait attesté par la source : une saisie à la main ne le remplace pas."};
 
-function compte(){
-  return (AJOUTS.portrait?1:0) + Object.keys(AJOUTS.faits).length
-       + AJOUTS.photos.length + AJOUTS.recettes.length;
+/* ---------- petits outils ---------- */
+const $ = (s,r)=>(r||document).querySelector(s);
+const $$ = (s,r)=>[...(r||document).querySelectorAll(s)];
+function mk(t, props, ...enf){
+  const e = document.createElement(t);
+  Object.assign(e, props||{});
+  enf.forEach(c=>{ if(c!=null) e.append(c); });
+  return e;
 }
-function majBarre(){
-  const n = compte();
-  document.getElementById("barre").classList.toggle("visible", n>0);
-  document.getElementById("quoi").textContent =
-    n + (n>1 ? " ajouts en attente" : " ajout en attente");
-  /* Filet de sécurité seulement : le vrai enregistrement est le fichier.
-     Sur file:// le stockage du navigateur est capricieux, donc on essaie
-     sans jamais en dépendre. */
-  try { localStorage.setItem(CLE, JSON.stringify(AJOUTS)); } catch(e){}
-}
+function val(el){ try { return JSON.parse(el.dataset.val || "null"); } catch(e){ return null; } }
 function lire(fichier, suite){
   const l = new FileReader();
   l.onload = () => suite(l.result);
   l.readAsDataURL(fichier);
 }
-
-/* ---- 1. le portrait ---- */
-const zone = document.getElementById("zone-portrait");
-const fPortrait = document.getElementById("f-portrait");
-if(zone){
-  zone.addEventListener("click", ()=>fPortrait.click());
-  zone.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault(); fPortrait.click();} });
-}
-fPortrait.addEventListener("change", ()=>{
-  const f = fPortrait.files[0]; if(!f) return;
-  lire(f, d=>{
-    zone.innerHTML = '<img class="portrait" alt="">';
-    zone.querySelector("img").src = d;
-    AJOUTS.portrait = {fichier:f.name, donnee:d};
-    const avis = document.getElementById("sans-portrait");
-    if(avis) avis.remove();     /* la consigne ne vaut plus : on vient de le faire */
-    majBarre();
-  });
-});
-
-/* ---- 2. les dates ---- */
-function demanderFait(b){
-  const cle = b.dataset.fait, dd = b.closest("dd") || b.parentElement;
-  if(dd.querySelector(".saisie")) return;
-  const i = document.createElement("input");
-  i.className="saisie"; i.type="text"; i.value = AJOUTS.faits[cle] || "";
-  i.placeholder = "jj-mm-aaaa, ou ce que vous savez";
-  const ok = document.createElement("button");
-  ok.className="b-modif"; ok.type="button"; ok.textContent="Garder";
-  ok.addEventListener("click", ()=>{
-    const v = i.value.trim();
-    if(v) AJOUTS.faits[cle]=v; else delete AJOUTS.faits[cle];
-    dd.textContent = v || "—";
-    const nb=document.createElement("button");
-    nb.className="b-modif"; nb.type="button"; nb.dataset.fait=cle; nb.textContent="modifier";
-    dd.appendChild(nb); nb.addEventListener("click", ()=>demanderFait(nb));
-    majBarre();
-  });
-  i.addEventListener("keydown", e=>{ if(e.key==="Enter") ok.click(); });
-  dd.textContent=""; dd.appendChild(i); dd.appendChild(ok); i.focus();
+let minuterie = null;
+function dire(txt, genre){
+  const t = $("#toast");
+  t.textContent = txt;
+  t.className = "toast visible " + (genre||"");
+  clearTimeout(minuterie);
+  if(genre !== "attente")
+    minuterie = setTimeout(()=>t.classList.remove("visible"), genre==="erreur" ? 9000 : 2800);
 }
 
-/* ---- 3. les photos ---- */
-const fPhotos = document.getElementById("f-photos");
-document.getElementById("b-photos").addEventListener("click", ()=>fPhotos.click());
-fPhotos.addEventListener("change", ()=>{
-  [...fPhotos.files].forEach(f=>lire(f, d=>{
-    AJOUTS.photos.push({fichier:f.name, donnee:d, legende:""});
-    rendrePhotos(); majBarre();
+/* ===================================================================
+   L'ÉDITEUR EN PLACE — un seul, pour tout ce qui se modifie.
+   Il s'ouvre DANS l'élément cliqué ; le contenu d'origine est masqué, pas
+   détruit, donc « Annuler » rend exactement ce qui était là (défaut D-1 :
+   l'ancienne boîte remplaçait l'affichage par « — »).
+   =================================================================== */
+let ouvert = null;
+function fermerEditeur(){ if(ouvert){ const o = ouvert; ouvert = null; o(); } }
+
+function choixPersonnes(ids){
+  const w = mk("div", {className:"choix-pers"});
+  const puces = mk("div", {className:"cp-puces"});
+  let choisis = [...ids];
+  const dl = mk("datalist", {id:"dl-" + Math.random().toString(36).slice(2)});
+  PERSONNES.forEach(([id, nom, v])=>dl.append(mk("option", {value: nom + (v ? " (" + v + ")" : "") + " · " + id})));
+  const i = mk("input", {className:"saisie", type:"text",
+    placeholder:"Ajouter une personne : tapez un nom puis choisissez"});
+  i.setAttribute("list", dl.id);
+  function rendre(){
+    puces.textContent = "";
+    choisis.forEach(id=>{
+      const b = mk("span", {className:"cp-puce"}, (NOMS[id] ? NOMS[id][1] : id) + " ");
+      const x = mk("button", {type:"button", textContent:"×", title:"Retirer de ce fait"});
+      x.onclick = ()=>{ choisis = choisis.filter(y=>y!==id); rendre(); };
+      b.append(x); puces.append(b);
+    });
+  }
+  const prendre = ()=>{
+    const m = /· ([^·]+)$/.exec(i.value);
+    const id = m && m[1].trim();
+    if(id && NOMS[id] && !choisis.includes(id)){ choisis.push(id); rendre(); i.value = ""; }
+  };
+  i.addEventListener("change", prendre);
+  i.addEventListener("input", ()=>{ if(/· [^·]+$/.test(i.value)) prendre(); });
+  w.append(puces, i, dl);
+  w.valeurs = ()=>choisis;
+  rendre();
+  return w;
+}
+
+function editeur(cible, champs, o){
+  fermerEditeur();
+  const f = mk("form", {className:"editeur"});
+  const entrees = {};
+  champs.forEach(c=>{
+    let i;
+    if(c.type === "textarea")
+      i = mk("textarea", {className:"saisie saisie-l", value:c.valeur||"", placeholder:c.aide||""});
+    else if(c.type === "select"){
+      i = mk("select", {className:"saisie"});
+      c.options.forEach(([v,t])=>i.append(mk("option", {value:v, textContent:t})));
+      i.value = c.valeur || "";
+    }
+    else if(c.type === "personnes") i = choixPersonnes(c.valeur||[]);
+    else i = mk("input", {className:"saisie saisie-l", type:"text", value:c.valeur||"", placeholder:c.aide||""});
+    entrees[c.nom] = i;
+    f.append(mk("label", {className:"ed-champ"}, c.libelle ? mk("span", {textContent:c.libelle}) : null, i));
+  });
+  if(o.note) f.append(mk("p", {className:"ed-note", textContent:o.note}));
+  const ok = mk("button", {type:"submit", className:"ed-ok", textContent:o.libelleOk || "Enregistrer"});
+  const non = mk("button", {type:"button", className:"ed-non", textContent:"Annuler"});
+  const boutons = mk("div", {className:"ed-boutons"}, ok, non);
+  if(o.retirer){
+    const r = mk("button", {type:"button", className:"ed-retirer", textContent:o.libelleRetirer || "Retirer"});
+    r.onclick = ()=>{
+      if(confirm(o.confirmer || "Retirer cet élément de la fiche ?\n\nIl reste consigné dans l'historique et peut être restauré."))
+        o.retirer();
+    };
+    boutons.append(r);
+  }
+  f.append(boutons);
+  const valeurs = ()=>{ const r = {}; for(const k in entrees){ const i = entrees[k];
+    r[k] = i.valeurs ? i.valeurs() : i.value; } return r; };
+  f.addEventListener("submit", e=>{ e.preventDefault(); o.enregistrer(valeurs()); });
+  non.onclick = fermerEditeur;
+  f.addEventListener("keydown", e=>{
+    if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); fermerEditeur(); }
+    if(e.key === "Enter" && e.target.tagName === "INPUT" && !e.target.closest(".choix-pers")){
+      e.preventDefault(); f.requestSubmit(); }
+  });
+  f.addEventListener("click", e=>e.stopPropagation());
+  if(o.place === "apres"){ cible.hidden = true; cible.after(f); }
+  else { cible.classList.add("en-edition"); cible.append(f); }
+  ouvert = ()=>{ f.remove(); cible.hidden = false; cible.classList.remove("en-edition"); };
+  const premier = f.querySelector("input, textarea, select");
+  if(premier){ premier.focus(); if(premier.select && premier.value) premier.select(); }
+  return f;
+}
+
+/* ===================================================================
+   CHEMIN 1 — servie : chaque geste s'enregistre tout de suite.
+   =================================================================== */
+function envoyer(demande, recharger){
+  demande.source = SOURCE;
+  dire("Enregistrement…", "attente");
+  return fetch("/_modifier", {method:"POST",
+      headers:Object.assign({"Content-Type":"application/json", "X-Jeton":JETON}, EXTRA.entetes()),
+      body:JSON.stringify(demande)})
+    .then(r=>r.json())
+    .then(o=>{
+      if(!o || !o.ok){
+        const e = (o && o.erreur) || "raison inconnue";
+        dire("Non enregistré : " + e + EXTRA.indice(e), "erreur");
+        return false;
+      }
+      if(o.inchange){ fermerEditeur(); dire("Rien n'a changé."); return true; }
+      if(recharger === false) return true;
+      apresEnregistrement(o.avertissement || (o.message.charAt(0).toUpperCase() + o.message.slice(1) + "."));
+      return true;
+    })
+    .catch(()=>{
+      dire("Le serveur ne répond plus : rien n'a été enregistré. Relancez Serveur_Local.bat.", "erreur");
+      return false;
+    });
+}
+function apresEnregistrement(message){
+  /* Les données sont écrites et l'arbre est déjà refait quand le serveur
+     répond : on recharge, à la même hauteur, et on prévient l'arbre ouvert
+     dans un autre onglet pour qu'il se refasse aussi. */
+  try { sessionStorage.setItem("apres-maj:" + PID, JSON.stringify({y:scrollY, msg:message})); } catch(e){}
+  try { new BroadcastChannel("arbre-maj").postMessage({source:SOURCE, pid:PID}); } catch(e){}
+  location.reload();
+}
+
+const EDITER = {
+  fait(el){
+    const v = val(el) || {}, cle = el.dataset.cle;
+    editeur(el, [
+      {nom:"texte", libelle:"Date et lieu", valeur:v.texte, aide:"jj-mm-aaaa, lieu — ou ce que vous savez"},
+      {nom:"certitude", libelle:"Certitude", type:"select", options:CERTS, valeur:v.certitude},
+      {nom:"note", libelle:"Note (facultative)", valeur:v.note, aide:"d'où vient l'information"}],
+      {note: v.certitude === "attestee" ? EXTRA.noteAttestee : null,
+       enregistrer: r=>envoyer({op:"fait", pid:PID, cle, texte:r.texte, certitude:r.certitude, note:r.note}),
+       retirer: v.texte ? ()=>envoyer({op:"retrait", pid:PID, cle}) : null});
+  },
+  champ(el){
+    const cle = el.dataset.cle, v = val(el);
+    editeur(el, [{nom:"valeur", valeur:v}], {
+      enregistrer: r=>envoyer({op:"champ", pid:PID, cle, valeur:r.valeur}),
+      retirer: v ? ()=>envoyer({op:"retrait", pid:PID, cle}) : null});
+  },
+  liste(el){
+    const champ = el.dataset.champ, i = +el.dataset.i, v = val(el);
+    const long = champ === "notes" || champ === "marquants";
+    editeur(el, [{nom:"valeur", type: long ? "textarea" : "texte", valeur:v}], {
+      enregistrer: r=>envoyer({op:"liste", pid:PID, champ, index:i, attendu:v, valeur:r.valeur}),
+      retirer: ()=>envoyer({op:"retrait", pid:PID, cle:champ, index:i, attendu:v})});
+  },
+  recette(el){
+    const i = +el.dataset.i, v = val(el) || {};
+    editeur(el, [
+      {nom:"titre", libelle:"Nom de la recette", valeur:v.titre},
+      {nom:"texte", libelle:"La recette", type:"textarea", valeur:v.texte,
+       aide:"Ingrédients, préparation, et de qui elle vient…"}], {
+      enregistrer: r=>envoyer({op:"recette", pid:PID, index:i, titre:r.titre, texte:r.texte}),
+      retirer: ()=>envoyer({op:"recette", pid:PID, index:i, retrait:true}),
+      libelleRetirer:"Retirer la recette"});
+  },
+  photo(el){
+    const v = val(el) || {};
+    editeur(el, [{nom:"legende", libelle:"Légende", valeur:v.legende, aide:"Qui, où, quand"}], {
+      enregistrer: r=>envoyer({op:"photo", action:"legende", pid:PID, fichier:v.fichier, legende:r.legende}),
+      retirer: ()=>envoyer({op:"photo", action:"retrait", pid:PID, fichier:v.fichier}),
+      libelleRetirer:"Retirer la photo",
+      confirmer:"Retirer cette photo de la fiche ?\n\nLe fichier n'est pas effacé : il est rangé dans photos/_retirees et peut être restauré."});
+  },
+  evenement(el){ editerEvenement(el, val(el) || {}); },
+};
+
+function editerEvenement(el, v, place){
+  const nouveau = !v.id;
+  editeur(el, [
+    {nom:"date", libelle:"Quand", valeur:v.date, aide:"jj-mm-aaaa, une année, « vers 1975 »…"},
+    {nom:"texte", libelle:"Ce qui s'est passé", type:"textarea", valeur:v.texte},
+    {nom:"lieu", libelle:"Où (facultatif)", valeur:v.lieu},
+    {nom:"personnes", libelle:"Personnes concernées", type:"personnes", valeur:v.personnes || [PID]},
+    {nom:"certitude", libelle:"Certitude", type:"select", options:CERTS, valeur:v.certitude},
+    /* « provenance » et non « source » : « source » désigne déjà le
+       fichier de données dans chaque demande envoyée au serveur. */
+    {nom:"provenance", libelle:"Source (facultative)", valeur:v.source, aide:"livre, page, témoignage de…"}], {
+    place,
+    libelleOk: nouveau ? "Ajouter" : "Enregistrer",
+    note: "Un même fait apparaît sur la fiche de chaque personne concernée.",
+    enregistrer: r=>envoyer(Object.assign({op:"evenement", id:v.id || null}, r)),
+    retirer: nouveau ? null : ()=>envoyer({op:"evenement", id:v.id, retrait:true}),
+    libelleRetirer:"Retirer ce fait"});
+}
+
+function poserCrayon(el, c){
+  /* après la valeur, pas sous la note ni sous la légende */
+  const sous = el.querySelector(".v > small, .v > figcaption");
+  if(sous) sous.before(c); else el.append(c);
+}
+function brancherEdition(){
+  document.body.classList.add("edition");
+  $("#mode-note") && ($("#mode-note").textContent =
+    "Cliquez sur une valeur pour la corriger : elle s'enregistre dans le projet et l'arbre se refait.");
+  $$("[data-ed]").forEach(el=>{
+    const f = EDITER[el.dataset.ed]; if(!f) return;
+    const c = mk("button", {type:"button", className:"crayon", title:"Modifier", textContent:"✎"});
+    c.setAttribute("aria-label", "Modifier");
+    poserCrayon(el, c);
+    el.addEventListener("click", e=>{
+      if(el.classList.contains("en-edition") || e.target.closest(".editeur")) return;
+      if(e.target.closest("a") && e.target !== c) return;     /* un lien reste un lien */
+      e.preventDefault(); f(el);
+    });
+  });
+  $$("[data-ajout-liste]").forEach(b=>b.addEventListener("click", ()=>{
+    const champ = b.dataset.ajoutListe, long = champ === "notes" || champ === "marquants";
+    editeur(b, [{nom:"valeur", type: long ? "textarea" : "texte"}], {place:"apres", libelleOk:"Ajouter",
+      enregistrer: r=>envoyer({op:"liste", pid:PID, champ, index:null, valeur:r.valeur})});
   }));
-});
+  const bEv = $("#b-evenement");
+  if(bEv) bEv.addEventListener("click", ()=>editerEvenement(bEv, {}, "apres"));
+  $$("[data-retirer-section]").forEach(b=>b.addEventListener("click", ()=>{
+    if(confirm("Retirer toute cette section de la fiche ?\n\nElle reste dans l'historique et peut être restaurée."))
+      envoyer({op:"section_retrait", pid:PID, index:+b.dataset.retirerSection});
+  }));
+}
+
+/* ===================================================================
+   CHEMIN 2 — double-clic : on accumule, on rend un fichier.
+   =================================================================== */
+const AJOUTS = {id:PID, nom:PNOM, portrait:null, faits:{}, photos:[], recettes:[]};
+const CLE = "ajouts:" + PID;
+const pleine = rc => !!((rc.titre||"").trim() || (rc.texte||"").trim());
+
+function compte(){
+  /* Une recette vide n'est pas un ajout (défaut D-2) : elle ne compte pas,
+     et elle ne part pas dans le fichier. */
+  return (AJOUTS.portrait?1:0) + Object.keys(AJOUTS.faits).length
+       + AJOUTS.photos.length + AJOUTS.recettes.filter(pleine).length;
+}
+function majBarre(){
+  if(JETON) return;
+  const n = compte();
+  $("#barre").classList.toggle("visible", n>0);
+  $("#quoi").textContent = n + (n>1 ? " ajouts en attente" : " ajout en attente");
+  /* Filet de sécurité seulement : le vrai enregistrement est le fichier. */
+  try { localStorage.setItem(CLE, JSON.stringify(AJOUTS)); } catch(e){}
+}
+function afficherFait(el, texte, enAttente){
+  const v = el.querySelector(".v");
+  v.textContent = texte || "non renseignée";
+  v.classList.toggle("vide", !texte);
+  if(enAttente) v.append(mk("span", {className:"en-attente", textContent:"en attente"}));
+}
+function editerFaitFichier(el){
+  const v = val(el) || {}, cle = el.dataset.cle;
+  editeur(el, [{nom:"texte", valeur: AJOUTS.faits[cle] || v.texte || "",
+                aide:"jj-mm-aaaa, lieu — ou ce que vous savez"}], {
+    libelleOk:"Garder",
+    enregistrer: r=>{
+      const t = r.texte.trim();
+      fermerEditeur();
+      /* Saisie vide ou inchangée : on rend la valeur d'origine, on ne la
+         remplace jamais par « — » (défaut D-1). */
+      if(!t || t === (v.texte||"")){ delete AJOUTS.faits[cle]; afficherFait(el, v.texte, false); }
+      else { AJOUTS.faits[cle] = t; afficherFait(el, t, true); }
+      majBarre();
+    }});
+}
+function brancherFichier(){
+  document.body.classList.add("ajouts");
+  $$('[data-ed="fait"]').forEach(el=>{
+    const c = mk("button", {type:"button", className:"crayon", title:"Modifier", textContent:"✎"});
+    poserCrayon(el, c);
+    el.addEventListener("click", e=>{
+      if(el.classList.contains("en-edition") || e.target.closest(".editeur")) return;
+      if(e.target.closest("a") && e.target !== c) return;
+      e.preventDefault(); editerFaitFichier(el);
+    });
+  });
+}
 function rendrePhotos(){
-  const h = document.getElementById("liste-photos");
+  const h = $("#liste-photos");
   h.innerHTML = "";
   AJOUTS.photos.forEach((ph,k)=>{
-    const d = document.createElement("div"); d.className="vignette";
-    const im = document.createElement("img"); im.src = ph.donnee; d.appendChild(im);
-    const lg = document.createElement("input");
-    lg.className="saisie saisie-l"; lg.placeholder="Légende"; lg.value=ph.legende;
-    lg.style.marginTop="7px"; lg.style.fontSize="12.5px";
+    const d = mk("div", {className:"vignette"});
+    d.append(mk("img", {src:ph.donnee, alt:""}));
+    const lg = mk("input", {className:"saisie saisie-l", placeholder:"Légende", value:ph.legende||""});
+    lg.style.marginTop = "7px"; lg.style.fontSize = "12.5px";
     lg.addEventListener("input", ()=>{ ph.legende = lg.value; majBarre(); });
-    d.appendChild(lg); h.appendChild(d);
+    const x = mk("button", {type:"button", className:"b-petit", textContent:"Retirer"});
+    x.onclick = ()=>{ AJOUTS.photos.splice(k,1); rendrePhotos(); majBarre(); };
+    d.append(lg, x); h.append(d);
   });
 }
-
-/* ---- 4. les recettes ---- */
-document.getElementById("b-recette").addEventListener("click", ()=>{
-  AJOUTS.recettes.push({titre:"", texte:""}); rendreRecettes(); majBarre();
-  const t = document.querySelector("#liste-recettes .saisie"); if(t) t.focus();
-});
 function rendreRecettes(){
-  const h = document.getElementById("liste-recettes");
+  const h = $("#liste-recettes");
   h.innerHTML = "";
-  AJOUTS.recettes.forEach(rc=>{
-    const d = document.createElement("div"); d.className="recette";
-    const ti = document.createElement("input");
-    ti.className="saisie saisie-l"; ti.placeholder="Nom de la recette"; ti.value=rc.titre;
-    ti.addEventListener("input", ()=>{ rc.titre=ti.value; majBarre(); });
-    const tx = document.createElement("textarea");
-    tx.className="saisie saisie-l"; tx.placeholder="Ingrédients, préparation, et de qui elle vient…";
-    tx.value=rc.texte;
-    tx.addEventListener("input", ()=>{ rc.texte=tx.value; majBarre(); });
-    d.appendChild(ti); d.appendChild(tx); h.appendChild(d);
+  AJOUTS.recettes.forEach((rc,k)=>{
+    const d = mk("div", {className:"recette"});
+    const ti = mk("input", {className:"saisie saisie-l", placeholder:"Nom de la recette", value:rc.titre});
+    ti.addEventListener("input", ()=>{ rc.titre = ti.value; majBarre(); });
+    const tx = mk("textarea", {className:"saisie saisie-l",
+      placeholder:"Ingrédients, préparation, et de qui elle vient…", value:rc.texte});
+    tx.addEventListener("input", ()=>{ rc.texte = tx.value; majBarre(); });
+    const x = mk("button", {type:"button", className:"b-petit", textContent:"Retirer cette recette"});
+    x.onclick = ()=>{ AJOUTS.recettes.splice(k,1); rendreRecettes(); majBarre(); };
+    d.append(ti, tx, x); h.append(d);
   });
 }
-
-/* ---- 5. enregistrer ----
-   DEUX CHEMINS, UNE SEULE PAGE. Servie par le serveur local, elle écrit
-   directement. Ouverte par double-clic, elle rend un fichier d'ajouts.
-
-   C'est la page qui constate comment elle a été ouverte, et non deux
-   versions à maintenir : deux versions divergeraient, et c'est celle qu'on
-   teste le moins qui partirait chez la parenté. L'amendement de l'interdit 4
-   l'exige — un export doit rester utilisable sans serveur. */
-let JETON = null;
-if(location.protocol === "http:" || location.protocol === "https:"){
-  fetch("/_jeton").then(r=>r.ok?r.json():null).then(o=>{
-    if(o && o.jeton){
-      JETON = o.jeton;
-      const b = document.getElementById("b-enregistrer");
-      if(b) b.textContent = "Enregistrer dans le projet";
-    }
-  }).catch(()=>{});
-}
-
 function parFichier(){
-  const b = new Blob([JSON.stringify(AJOUTS, null, 1)], {type:"application/json"});
+  const envoi = Object.assign({}, AJOUTS, {recettes: AJOUTS.recettes.filter(pleine)});
+  const b = new Blob([JSON.stringify(envoi, null, 1)], {type:"application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(b); a.download = "ajouts-" + PID + ".json";
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-  dire("Fichier rendu. Déposez-le sur Appliquer_Ajouts.bat.");
+  $("#quoi").textContent = "Fichier rendu. Déposez-le sur Appliquer_Ajouts.bat.";
 }
-
-function dire(txt){ document.getElementById("quoi").textContent = txt; }
-
-function parServeur(){
-  dire("Enregistrement…");
-  fetch("/_ajouts", {method:"POST", headers:{
-      "Content-Type":"application/json", "X-Jeton":JETON},
-      body: JSON.stringify(AJOUTS)})
-   .then(r=>r.json())
-   .then(o=>{
-     if(o && o.ok){
-       dire("Enregistré dans le projet.");
-       try { localStorage.removeItem(CLE); } catch(e){}
-       /* On vide ce qui est versé : le laisser à l'écran ferait croire
-          qu'il reste à faire, et un second envoi serait refusé pour
-          doublon sans que personne comprenne pourquoi. */
-       AJOUTS.portrait = null; AJOUTS.faits = {};
-       AJOUTS.photos = []; AJOUTS.recettes = [];
-       rendrePhotos(); rendreRecettes();
-       setTimeout(()=>{ document.getElementById("barre")
-                          .classList.remove("visible"); }, 2200);
-     } else {
-       dire("Refusé : " + ((o && o.erreur) || "raison inconnue"));
-     }
-   })
-   .catch(e=>{
-     /* Le serveur a pu être fermé entre-temps. On ne perd rien : on
-        retombe sur le fichier. */
-     dire("Serveur injoignable — on passe par le fichier.");
-     setTimeout(parFichier, 700);
-   });
-}
-
-document.getElementById("b-enregistrer").addEventListener("click", ()=>{
+$("#b-enregistrer").addEventListener("click", ()=>{
   AJOUTS.date = new Date().toISOString().slice(0,10);
-  if(JETON) parServeur(); else parFichier();
+  parFichier();
 });
 
-/* ---- reprise d'un brouillon ---- */
-try {
-  const vieux = localStorage.getItem(CLE);
-  if(vieux){
-    const o = JSON.parse(vieux);
-    Object.assign(AJOUTS, o);
-    if(AJOUTS.portrait && zone){
-      zone.innerHTML = '<img class="portrait" alt="">';
-      zone.querySelector("img").src = AJOUTS.portrait.donnee;
-    }
-    Object.entries(AJOUTS.faits||{}).forEach(([cle,v])=>{
-      const b = document.querySelector('[data-fait="'+cle+'"]');
-      if(b){ const dd=b.closest("dd")||b.parentElement; dd.textContent=v; dd.appendChild(b); }
-    });
-    rendrePhotos(); rendreRecettes(); majBarre();
-  }
-} catch(e){}
-document.querySelectorAll("[data-fait]").forEach(b=>{
-  const clone=b.cloneNode(true); b.replaceWith(clone);
-  clone.addEventListener("click", ()=>demanderFait(clone));
+/* ===================================================================
+   Les gestes communs aux deux chemins : portrait, photos, recettes.
+   =================================================================== */
+const zone = $("#zone-portrait"), fPortrait = $("#f-portrait"), fPhotos = $("#f-photos");
+if(zone){
+  zone.addEventListener("click", ()=>fPortrait.click());
+  zone.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); fPortrait.click(); } });
+}
+fPortrait.addEventListener("change", ()=>{
+  const f = fPortrait.files[0]; if(!f) return;
+  lire(f, d=>{
+    if(JETON){ envoyer({op:"portrait", pid:PID, donnee:d}); return; }
+    zone.innerHTML = '<img class="portrait" alt="">';
+    zone.querySelector("img").src = d;
+    AJOUTS.portrait = {fichier:f.name, donnee:d};
+    const avis = $("#sans-portrait"); if(avis) avis.remove();
+    majBarre();
+  });
+  fPortrait.value = "";
 });
+$("#b-photos").addEventListener("click", ()=>fPhotos.click());
+fPhotos.addEventListener("change", ()=>{
+  const fichiers = [...fPhotos.files];
+  fPhotos.value = "";
+  if(!JETON){
+    fichiers.forEach(f=>lire(f, d=>{
+      AJOUTS.photos.push({fichier:f.name, donnee:d, legende:""});
+      rendrePhotos(); majBarre();
+    }));
+    return;
+  }
+  /* Servie : les photos partent une à une, puis on recharge une fois. */
+  let n = 0;
+  (function suivante(){
+    if(n >= fichiers.length){
+      apresEnregistrement(n > 1 ? n + " photos ajoutées." : "Photo ajoutée.");
+      return;
+    }
+    const f = fichiers[n];
+    dire("Envoi de la photo " + (n+1) + " sur " + fichiers.length + "…", "attente");
+    lire(f, d=>envoyer({op:"photo", action:"ajout", pid:PID, donnee:d, legende:""}, false)
+      .then(ok=>{ if(ok){ n++; suivante(); } }));
+  })();
+});
+$("#b-recette").addEventListener("click", ()=>{
+  if(JETON){
+    const b = $("#b-recette");
+    editeur(b, [
+      {nom:"titre", libelle:"Nom de la recette"},
+      {nom:"texte", libelle:"La recette", type:"textarea", aide:"Ingrédients, préparation, et de qui elle vient…"}], {
+      place:"apres", libelleOk:"Ajouter la recette",
+      enregistrer: r=>envoyer({op:"recette", pid:PID, index:null, titre:r.titre, texte:r.texte})});
+    return;
+  }
+  AJOUTS.recettes.push({titre:"", texte:""}); rendreRecettes(); majBarre();
+  const t = $$("#liste-recettes .recette .saisie").slice(-2)[0]; if(t) t.focus();
+});
+
+/* ===================================================================
+   Au chargement : quel chemin ?
+   =================================================================== */
+function demarrerFichier(){
+  brancherFichier();
+  try {
+    const vieux = localStorage.getItem(CLE);
+    if(vieux){
+      Object.assign(AJOUTS, JSON.parse(vieux));
+      AJOUTS.recettes = (AJOUTS.recettes||[]).filter(pleine);
+      if(AJOUTS.portrait && zone){
+        zone.innerHTML = '<img class="portrait" alt="">';
+        zone.querySelector("img").src = AJOUTS.portrait.donnee;
+      }
+      Object.entries(AJOUTS.faits||{}).forEach(([cle,v])=>{
+        const el = $('[data-ed="fait"][data-cle="'+cle+'"]');
+        if(el) afficherFait(el, v, true);
+      });
+      rendrePhotos(); rendreRecettes(); majBarre();
+    }
+  } catch(e){}
+}
+if(SERVIE){
+  fetch("/_jeton").then(r=>r.ok ? r.json() : null).then(o=>{
+    if(o && o.jeton){
+      JETON = o.jeton;
+      brancherEdition();
+      EXTRA.apresChargement(o);
+      try {
+        const m = JSON.parse(sessionStorage.getItem("apres-maj:" + PID) || "null");
+        if(m){ sessionStorage.removeItem("apres-maj:" + PID); scrollTo(0, m.y||0); dire(m.msg, m.msg && /échoué/.test(m.msg) ? "erreur" : ""); }
+      } catch(e){}
+    } else demarrerFichier();
+  }).catch(demarrerFichier);
+} else demarrerFichier();
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") fermerEditeur(); });
 </script>
+__ADMIN_JS__
 <script>
 document.querySelectorAll(".voile button").forEach(b=>b.addEventListener("click",()=>{
   const v=b.closest(".voile"), c=v.querySelector(".voile-contenu");
@@ -1706,6 +2150,125 @@ document.querySelectorAll(".voile button").forEach(b=>b.addEventListener("click"
 </script>
 </body>
 </html>
+"""
+
+SCRIPT_ADMIN = r"""<style>
+.admin-seul{display:none}
+body.admin .admin-seul{display:revert}
+.b-adm{font:inherit; border-radius:7px; cursor:pointer; margin-left:auto; border:1px solid var(--line); background:transparent; color:var(--muted); font-size:12px; padding:4px 11px}
+.b-adm.actif{border-color:var(--alerte); color:var(--alerte); background:var(--alerte-bg); font-weight:600}
+dialog#d-adm{border:1px solid var(--line); border-radius:12px; background:var(--surface); color:var(--ink);
+  padding:20px 22px; width:min(380px, calc(100vw - 32px))}
+dialog#d-adm::backdrop{background:color-mix(in srgb, var(--ink) 40%, transparent)}
+dialog#d-adm h3{margin:0 0 6px; font-size:17px}
+dialog#d-adm p{font-size:13px; color:var(--muted); margin:0 0 12px; line-height:1.5}
+dialog#d-adm .saisie{width:100%; min-width:0; margin:0 0 6px}
+ol.historique{list-style:none; margin:0; padding:0}
+.hist{padding:8px 0; border-bottom:1px solid var(--line-soft); font-size:13.4px; line-height:1.5}
+.hist-d{color:var(--faint); font-variant-numeric:tabular-nums; margin-right:9px; font-size:12px}
+.hist-adm{font-size:10px; font-weight:700; color:var(--alerte); background:var(--alerte-bg);
+  padding:1px 6px; border-radius:4px; margin-left:7px}
+.hist-v{display:block; color:var(--muted); font-size:12.6px}
+</style>
+<script>
+"use strict";
+/* ===================================================================
+   MODE ADMINISTRATEUR — C-021. Absent de la version partageable.
+
+   La page ne connaît PAS le mot de passe : elle l'envoie au serveur local,
+   qui le compare à une empreinte gardée hors de git et rend un jeton de
+   session. Sans serveur, ce mode n'existe pas.
+
+   Ce qu'il ouvre : remplacer un fait attesté, changer un nom, retirer ce
+   qui vient des sources, et restaurer depuis l'historique. Rien n'est
+   jamais effacé : chaque retrait est consigné et réversible.
+   =================================================================== */
+let SESSION_ADM = null;
+try { SESSION_ADM = localStorage.getItem("session-adm"); } catch(e){}
+const bAdm = $("#b-adm"), dAdm = $("#d-adm");
+
+EXTRA.entetes = ()=> SESSION_ADM ? {"X-Admin": SESSION_ADM} : {};
+EXTRA.noteAttestee = "Fait attesté par la source : seul le mode administrateur peut le remplacer. "
+  + "L'ancienne valeur reste dans l'historique.";
+EXTRA.indice = e => (/administrateur/.test(e) && !SESSION_ADM) ? " (bouton « Administrateur » en haut de la page)" : "";
+EXTRA.apresChargement = o=>{
+  if(!o.admin_possible) return;
+  bAdm.hidden = false;
+  if(SESSION_ADM) chargerHistorique();
+  majAdm();
+};
+
+function majAdm(){
+  document.body.classList.toggle("admin", !!SESSION_ADM);
+  bAdm.textContent = SESSION_ADM ? "Administrateur · quitter" : "Administrateur";
+  bAdm.classList.toggle("actif", !!SESSION_ADM);
+}
+function oublier(){
+  SESSION_ADM = null;
+  try { localStorage.removeItem("session-adm"); } catch(e){}
+  majAdm();
+}
+function poster(chemin, corps){
+  return fetch(chemin, {method:"POST", headers:Object.assign(
+    {"Content-Type":"application/json", "X-Jeton":JETON}, EXTRA.entetes()),
+    body:JSON.stringify(corps||{})}).then(r=>r.json());
+}
+bAdm.addEventListener("click", ()=>{
+  if(SESSION_ADM){
+    poster("/_admin_sortir").catch(()=>{});
+    oublier(); dire("Mode administrateur quitté.");
+    return;
+  }
+  $("#adm-mdp").value = ""; $("#adm-err").textContent = "";
+  dAdm.showModal();
+});
+$("#adm-non").addEventListener("click", ()=>dAdm.close());
+$("#adm-form").addEventListener("submit", e=>{
+  e.preventDefault();
+  $("#adm-err").textContent = "Vérification…";
+  poster("/_admin", {motdepasse: $("#adm-mdp").value}).then(o=>{
+    if(o && o.ok){
+      SESSION_ADM = o.admin;
+      try { localStorage.setItem("session-adm", SESSION_ADM); } catch(e){}
+      dAdm.close(); majAdm(); chargerHistorique();
+      dire("Mode administrateur ouvert.");
+    } else $("#adm-err").textContent = (o && o.erreur) || "refusé";
+  }).catch(()=>{ $("#adm-err").textContent = "Le serveur ne répond pas."; });
+});
+
+const LIB_ACTION = {ajout:"ajouté", modification:"modifié", retrait:"retiré", restauration:"restauré"};
+function court(x){
+  if(x == null || x === "") return "—";
+  if(typeof x === "string") return x.length > 90 ? x.slice(0,89) + "…" : x;
+  if(x.texte) return court(x.texte + (x.date ? " (" + x.date + ")" : ""));
+  if(x.titre) return court(x.titre);
+  return court(JSON.stringify(x));
+}
+function chargerHistorique(){
+  poster("/_historique", {source:SOURCE, pid:PID}).then(o=>{
+    if(!o || !o.ok){ oublier(); return; }
+    const h = $("#liste-historique"); h.textContent = "";
+    const entrees = (o.entrees||[]).slice().reverse();
+    if(!entrees.length){ h.append(mk("p", {className:"src", textContent:"Aucune modification consignée pour cette fiche."})); return; }
+    entrees.forEach(e=>{
+      const li = mk("li", {className:"hist"});
+      li.append(mk("span", {className:"hist-d", textContent:(e.date||"").replace("T"," ").slice(0,16)}),
+        mk("b", {textContent:(e.champ||"") + " " + (LIB_ACTION[e.action]||e.action||"")}),
+        e.admin ? mk("span", {className:"hist-adm", textContent:"admin"}) : null);
+      if(e.ancien != null) li.append(mk("span", {className:"hist-v", textContent:"avant : " + court(e.ancien)}));
+      if(e.nouveau != null) li.append(mk("span", {className:"hist-v", textContent:"après : " + court(e.nouveau)}));
+      if(e.restauree) li.append(mk("span", {className:"hist-v", textContent:"restauré le " + e.restauree.replace("T"," ").slice(0,16)}));
+      else if((e.action === "retrait" || e.action === "modification") && e.ancien != null){
+        const b = mk("button", {type:"button", className:"b-petit",
+          textContent: e.action === "retrait" ? "Restaurer" : "Revenir à l'ancienne valeur"});
+        b.onclick = ()=>envoyer({op:"restaurer", n:e.n});
+        li.append(b);
+      }
+      h.append(li);
+    });
+  }).catch(()=>{});
+}
+</script>
 """
 
 LIB_CERT = {"approximative": "approx.", "deduite": "déduit", "divergente": "divergent",
@@ -1740,11 +2303,12 @@ def _an(f):
 
 
 def vie(p):
-    n = _an(p.get("naissance")) or _an(p.get("bapteme"))
-    d = _an(p.get("deces")) or _an(p.get("sepulture"))
+    fn = p.get("naissance") if _an(p.get("naissance")) else p.get("bapteme")
+    fd = p.get("deces") if _an(p.get("deces")) else p.get("sepulture")
+    n, d = _an(fn), _an(fd)
     ap = lambda f: bool(f) and f.get("certitude") in ("approximative", "deduite")
-    g = "~" if (ap(p.get("naissance")) or ap(p.get("bapteme"))) else ""
-    h = "~" if (ap(p.get("deces")) or ap(p.get("sepulture"))) else ""
+    g = "~" if ap(fn) else ""
+    h = "~" if ap(fd) else ""
     if n and d:
         return f"{g}{n} – {h}{d}"
     if n:
@@ -1889,13 +2453,34 @@ def section_page_html(s, carte=None):
     return h
 
 
-def construire_page(pid, donnees, nom_arbre, date_gen):
+def attr_json(o):
+    """Une valeur pour un attribut data-val : JSON, puis échappée."""
+    return esc(json.dumps(o, ensure_ascii=False))
+
+
+def est_recette(s):
+    return bool(s.get("recette")) or str(s.get("titre", "")).startswith("Recette — ")
+
+
+def titre_recette(s):
+    t = str(s.get("titre", ""))
+    return t[len("Recette — "):] if t.startswith("Recette — ") else t
+
+
+def evenements_de(pid, donnees):
+    evs = [e for e in donnees.get("evenements", []) if pid in (e.get("personnes") or [])]
+    return sorted(evs, key=lambda e: (e.get("tri") or 9999, e.get("date") or ""))
+
+
+def construire_page(pid, donnees, nom_arbre, date_gen, source_nom="", partage=False,
+                    galerie=None, personnes_js="[]"):
     personnes = donnees["personnes"]
     p = personnes[pid]
     unions = donnees.get("unions", [])
     mes_unions = [u for u in unions if pid in u.get("conjoints", [])]
     union_parente = next((u for u in unions if pid in (u.get("enfants") or [])), None)
     carte = donnees.get("meta", {}).get("carte")
+    admin_ok = not partage      # la version partageable ne porte aucune trace du mode
 
     # ---- bandeaux d'identité ----
     # Même règle que sur la carte flottante : pas de champ, pas de jeton.
@@ -1925,51 +2510,111 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
 
     corps, cote = [], []
 
-    def ajoute(ancre, titre, contenu):
+    def ajoute(ancre, titre, contenu, vide=False, classe=""):
+        """« vide » : la rubrique n'a rien encore ; elle n'apparaît qu'en
+        modification, pour qu'on puisse la remplir."""
         if not contenu:
             return
-        corps.append(f'<section id="{ancre}"><h2>{esc(titre)}</h2>{contenu}</section>')
-        cote.append(f'<a href="#{ancre}">{esc(titre)}</a>')
+        cl = " ".join(x for x in (classe, "vide-edition" if vide else "") if x)
+        cla = f' class="{cl}"' if cl else ""
+        corps.append(f'<section id="{ancre}"{cla}><h2>{esc(titre)}</h2>{contenu}</section>')
+        cote.append(f'<a href="#{ancre}"{cla}>{esc(titre)}</a>')
+
+    def liste_ed(champ, items, rendu, libelle_ajout):
+        lis = "".join(f'<li class="ed" data-ed="liste" data-champ="{champ}" data-i="{i}" '
+                      f'data-val="{attr_json(x)}"><span class="v">{rendu(x)}</span></li>'
+                      for i, x in enumerate(items))
+        return (f'<ul class="liste-ed l-{champ}">{lis}</ul>'
+                f'<button type="button" class="b-plus-ed" data-ajout-liste="{champ}">'
+                f'+ {esc(libelle_ajout)}</button>')
 
     # ---- synthèse ----
+    # Chaque valeur porte de quoi la modifier : data-ed dit quoi, data-val
+    # ce qui est là. L'éditeur part de la valeur RÉELLE (défaut D-1 : la
+    # boîte s'ouvrait vide parce qu'elle ne connaissait que les ajouts).
     L = []
     for lib, cle in (("Naissance", "naissance"), ("Baptême", "bapteme"),
                      ("Décès", "deces"), ("Sépulture", "sepulture")):
         x = p.get(cle)
-        bout = f'<button type="button" class="b-modif" data-fait="{cle}">modifier</button>'
         if x:
-            L.append(f'<dt>{lib}</dt><dd>{tl(x.get("texte","—"), carte)}{cert_html(x)}{bout}'
-                     + (f'<small>{tl(x["note"], carte)}</small>' if x.get("note") else "") + "</dd>")
-        elif cle == "naissance":
-            # Même sans date connue, la ligne existe : sinon il n'y a rien où
-            # cliquer, et la fonction reste invisible pour qui en aurait besoin.
-            L.append(f'<dt>{lib}</dt><dd><span style="color:var(--faint)">non renseignée</span>{bout}</dd>')
-    if p.get("variantes"):
-        L.append(f'<dt>Variantes</dt><dd>{esc(", ".join(p["variantes"]))}</dd>')
-    if p.get("metiers"):
-        L.append("<dt>Métier</dt><dd>" + "<br>".join(esc(m) for m in p["metiers"]) + "</dd>")
-    if p.get("lieux"):
-        L.append("<dt>Lieux</dt><dd>" + "<br>".join(lieu_html(m, carte) for m in p["lieux"]) + "</dd>")
-    ajoute("synthese", "Synthèse", f'<dl class="faits">{"".join(L)}</dl>' if L else "")
+            val = {"texte": x.get("texte", ""), "certitude": x.get("certitude") or "",
+                   "note": x.get("note") or ""}
+            dedans = (f'<span class="v">{tl(x.get("texte","—"), carte)}{cert_html(x)}'
+                      + (f'<small>{tl(x["note"], carte)}</small>' if x.get("note") else "")
+                      + "</span>")
+            L.append(f'<dt>{lib}</dt><dd class="ed" data-ed="fait" data-cle="{cle}" '
+                     f'data-val="{attr_json(val)}">{dedans}</dd>')
+        else:
+            # Même sans date connue, la ligne de naissance existe : sinon il
+            # n'y a rien où cliquer. Les autres n'apparaissent qu'en
+            # modification.
+            cl = "" if cle == "naissance" else ' class="vide-edition"'
+            L.append(f'<dt{cl}>{lib}</dt><dd{cl} data-ed="fait" data-cle="{cle}" data-val="null">'
+                     f'<span class="v vide">non renseignée</span></dd>')
+    if admin_ok:
+        for lib, cle in (("Prénom", "prenom"), ("Nom", "nom"), ("Nom affiché", "nom_affiche")):
+            L.append(f'<dt class="admin-seul">{lib}</dt><dd class="admin-seul ed" data-ed="champ" '
+                     f'data-cle="{cle}" data-val="{attr_json(p.get(cle))}">'
+                     f'<span class="v">{esc(p.get(cle) or "—")}</span></dd>')
+    cl = "" if p.get("surnom") else ' class="vide-edition"'
+    L.append(f'<dt{cl}>Surnom</dt><dd{cl} data-ed="champ" data-cle="surnom" '
+             f'data-val="{attr_json(p.get("surnom"))}"><span class="v{"" if p.get("surnom") else " vide"}">'
+             f'{esc(p.get("surnom") or "aucun")}</span></dd>')
+    for lib, champ, rendu, aj in (("Variantes", "variantes", esc, "variante"),
+                                  ("Métier", "metiers", esc, "métier"),
+                                  ("Lieux", "lieux", lambda m: lieu_html(m, carte), "lieu")):
+        items = p.get(champ) or []
+        cl = "" if items else ' class="vide-edition"'
+        L.append(f"<dt{cl}>{lib}</dt><dd{cl}>" + liste_ed(champ, items, rendu, aj) + "</dd>")
+    ajoute("synthese", "Synthèse", f'<dl class="faits">{"".join(L)}</dl>'
+           '<p class="note-ajout" id="mode-note"></p>')
 
     # ---- faits marquants ----
-    if p.get("marquants"):
-        ajoute("marquants", "Faits marquants",
-               '<ul class="marquants">' + "".join(f"<li>{tl(m, carte)}</li>" for m in p["marquants"]) + "</ul>")
+    # Deux origines, une seule rubrique : les faits rattachés à plusieurs
+    # personnes (donnees.evenements, C-021) et les mentions lues dans les
+    # sources (p.marquants), qui restent des phrases.
+    evs = evenements_de(pid, donnees)
+    M = []
+    for e in evs:
+        autres = [x for x in e.get("personnes", []) if x != pid]
+        avec = ("<small>avec " + ", ".join(lien(x, personnes) for x in autres) + "</small>"
+                if autres else "")
+        M.append(f'<li class="ed ev" data-ed="evenement" data-val="{attr_json(e)}"><span class="v">'
+                 + (f'<span class="ev-date">{esc(e["date"])}</span>' if e.get("date") else "")
+                 + tl(e.get("texte", ""), carte) + cert_html(e)
+                 + (f'<small>{lieu_html(e["lieu"], carte)}</small>' if e.get("lieu") else "")
+                 + avec
+                 + (f'<small class="ev-src">{esc(e["source"])}</small>' if e.get("source") else "")
+                 + "</span></li>")
+    for i, m in enumerate(p.get("marquants") or []):
+        M.append(f'<li class="ed" data-ed="liste" data-champ="marquants" data-i="{i}" '
+                 f'data-val="{attr_json(m)}"><span class="v">{tl(m, carte)}</span></li>')
+    ajoute("marquants", "Faits marquants",
+           f'<ul class="marquants">{"".join(M)}</ul>'
+           '<button type="button" class="b-plus-ed" id="b-evenement">+ Ajouter un fait marquant</button>',
+           vide=not M)
 
     # ---- notes ----
-    if p.get("notes"):
-        ajoute("notes", "Notes",
-               '<ul class="puces">' + "".join(f"<li>{tl(m, carte)}</li>" for m in p["notes"]) + "</ul>")
+    notes = p.get("notes") or []
+    ajoute("notes", "Notes", liste_ed("notes", notes, lambda m: tl(m, carte), "note")
+           .replace('class="liste-ed l-notes"', 'class="liste-ed l-notes puces"'),
+           vide=not notes)
 
     # ---- sections versées ----
+    # Les recettes ont leur rubrique à elles, plus bas ; les autres sections
+    # restent telles que versées, et seul l'administrateur peut en retirer.
     for i, s in enumerate(p.get("sections", [])):
+        if est_recette(s):
+            continue
         inner = section_page_html(s, carte)
         if s.get("prive"):
             inner = ('<div class="voile" data-ouvert="0"><button type="button">'
                      "Contenu confidentiel — cliquer pour afficher"
                      "<span>Masqué par défaut, et absent de la version partageable.</span>"
                      f'</button><div class="voile-contenu" hidden>{inner}</div></div>')
+        if admin_ok:
+            inner += (f'<button type="button" class="b-petit admin-seul" '
+                      f'data-retirer-section="{i}">Retirer cette section</button>')
         ajoute(f"s{i}", s.get("titre") or f"Section {i+1}", inner)
 
     # ---- relations ----
@@ -2002,19 +2647,36 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
     ajoute("relations", "Relations", f'<dl class="rel">{"".join(R)}</dl>' if R else "")
 
     # ---- photos et recettes : toujours là, même vides ----
-    # Une rubrique vide n'est pas un manque : c'est une invitation. C'est
-    # aussi ce qui permet à un parent de savoir qu'il peut verser quelque
-    # chose, sans qu'on ait eu à le lui écrire.
+    # Une rubrique vide n'est pas un manque : c'est une invitation.
+    V = []
+    for g in (galerie or []):
+        V.append(f'<figure class="vignette ed" data-ed="photo" '
+                 f'data-val="{attr_json({"fichier": g["fichier"], "legende": g.get("legende") or ""})}">'
+                 f'<span class="v"><img src="{g["uri"]}" alt="{esc(g.get("legende") or "")}">'
+                 + (f'<figcaption>{esc(g["legende"])}</figcaption>' if g.get("legende") else "")
+                 + "</span></figure>")
     ajoute("photos", "Photos",
+           f'<div class="vignettes">{"".join(V)}</div>'
            '<div class="vignettes" id="liste-photos"></div>'
            '<button type="button" class="b-ajout" id="b-photos">'
            '+ Ajouter des photos</button>'
-           '<p class="note-ajout">Les photos choisies s\'affichent tout de suite. '
+           '<p class="note-ajout note-fichier">Les photos choisies s\'affichent tout de suite. '
            'Ouverte depuis <code>Serveur_Local.bat</code>, cette fiche les range '
            'directement dans le projet ; ouverte par double-clic, elle rend un '
            'fichier d\'ajouts à déposer sur <code>Appliquer_Ajouts.bat</code>.</p>')
+    RC = []
+    for i, s in enumerate(p.get("sections", [])):
+        if not est_recette(s):
+            continue
+        c = s.get("contenu")
+        texte = "\n\n".join(c) if isinstance(c, list) else str(c or "")
+        RC.append(f'<div class="recette ed" data-ed="recette" data-i="{s.get("_i", i)}" '
+                  f'data-val="{attr_json({"titre": titre_recette(s), "texte": texte})}">'
+                  f'<div class="v"><h3>{esc(titre_recette(s))}</h3><p>{esc(texte)}</p>'
+                  + (f'<small class="src">{esc(s["source"])}</small>' if s.get("source") else "")
+                  + "</div></div>")
     ajoute("recettes", "Recettes",
-           '<div id="liste-recettes"></div>'
+           "".join(RC) + '<div id="liste-recettes"></div>'
            '<button type="button" class="b-ajout" id="b-recette">'
            '+ Ajouter une recette</button>')
 
@@ -2029,6 +2691,11 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
     if p.get("sources"):
         ajoute("sources", "Source", f'<p class="src">{esc(" · ".join(p["sources"]))}</p>')
 
+    # ---- historique : administrateur seulement, rempli par le serveur ----
+    if admin_ok:
+        ajoute("historique", "Historique des modifications",
+               '<ol class="historique" id="liste-historique"></ol>', classe="admin-seul")
+
     if not p.get("_photo"):
         corps.append('<p class="src" id="sans-portrait">Pas encore de portrait. '
                      "Cliquez sur le rond en haut de la page pour en choisir un sur "
@@ -2040,7 +2707,25 @@ def construire_page(pid, donnees, nom_arbre, date_gen):
             "Les mentions « approx. », « déduit », « divergent » et « incohérent » signalent ce que la "
             "source ne garantit pas. Rien n'a été complété par recherche extérieure.")
 
+    bouton_admin = ('<button type="button" class="b-adm" id="b-adm" hidden>Administrateur</button>'
+                    if admin_ok else "")
+    dialogue_admin = ('<dialog id="d-adm"><form id="adm-form">'
+                      '<h3>Mode administrateur</h3>'
+                      '<p>Remplacer un fait attesté, retirer ce qui n\'a pas sa place, '
+                      'restaurer depuis l\'historique.</p>'
+                      '<input type="password" id="adm-mdp" class="saisie" '
+                      'autocomplete="current-password" placeholder="Mot de passe">'
+                      '<p class="ed-note" id="adm-err"></p>'
+                      '<div class="ed-boutons"><button type="submit" class="ed-ok">Entrer</button>'
+                      '<button type="button" class="ed-non" id="adm-non">Annuler</button></div>'
+                      '</form></dialog>' if admin_ok else "")
+
     return (GABARIT_PAGE
+            .replace("__ADMIN_JS__", SCRIPT_ADMIN if admin_ok else "")
+            .replace("__DIALOGUE_ADMIN__", dialogue_admin)
+            .replace("__BOUTON_ADMIN__", bouton_admin)
+            .replace("__PERSONNES__", personnes_js)
+            .replace("__SOURCE__", esc(source_nom))
             .replace("__COTE__", "".join(cote))
             .replace("__CORPS__", "".join(corps))
             .replace("__PORTRAIT__", portrait)
@@ -2123,6 +2808,12 @@ def main():
     # --- confidentialité ---
     total_prive = sum(len([s for s in p.get("sections", []) if s.get("prive")])
                       for p in personnes.values())
+    # Chaque section garde son rang d'origine : la version partageable en
+    # retire, et une fiche qui modifie « la recette n° 3 » doit viser la
+    # bonne dans le fichier de données, pas la troisième qui reste.
+    for p in personnes.values():
+        for i, sct in enumerate(p.get("sections") or []):
+            sct["_i"] = i
     retires = retirer_confidentiel(personnes) if partage else 0
 
     meta = donnees.get("meta", {})
@@ -2135,7 +2826,8 @@ def main():
     nom_dossier_fiches = (source.stem.replace("genealogie_", "arbre_")
                           + ("_partage" if partage else "") + "_fiches")
     html = (GABARIT
-            .replace("__DONNEES__", json.dumps(donnees, ensure_ascii=False))
+            .replace("__SOURCE__", source.name)
+            .replace("__DONNEES__", json.dumps(donnees, ensure_ascii=False).replace("</", "<\\/"))
             .replace("__DOSSIER_FICHES__", nom_dossier_fiches)
             .replace("__TITRE__", titre)
             .replace("__SOUS_TITRE__", sous))
@@ -2152,11 +2844,22 @@ def main():
     dossier_fiches.mkdir(exist_ok=True)
     date_gen = date.today().strftime("%d/%m/%Y")
     attendus = set()
+    # La liste des personnes, pour rattacher un fait marquant à plusieurs.
+    personnes_js = json.dumps(
+        sorted(([pid, nom_complet(p), vie(p)] for pid, p in personnes.items()),
+               key=lambda x: x[1].lower()),
+        ensure_ascii=False).replace("</", "<\\/")
     for pid in personnes:
         nom = f"{pid}.html"
         attendus.add(nom)
+        legendes = {g.get("fichier"): g for g in (personnes[pid].get("galerie") or [])}
+        galerie = [{"fichier": f.name, "uri": charger_image(f),
+                    "legende": (legendes.get(f.name) or {}).get("legende", "")}
+                   for f in photos_galerie(dossier_photos, pid)]
         (dossier_fiches / nom).write_text(
-            construire_page(pid, donnees, sortie.name, date_gen), encoding="utf-8")
+            construire_page(pid, donnees, sortie.name, date_gen, source_nom=source.name,
+                            partage=partage, galerie=galerie, personnes_js=personnes_js),
+            encoding="utf-8")
 
     # Les fiches de personnes retirées du JSON deviennent orphelines.
     # On ne supprime jamais de fichier sans le dire : on signale, c'est tout.

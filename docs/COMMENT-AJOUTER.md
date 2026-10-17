@@ -1,11 +1,11 @@
-# Comment ajouter des photos, des dates et des recettes
+# Comment modifier les fiches : photos, dates, recettes, faits marquants
 
 Deux chemins. **Sur votre poste, utilisez le premier.** Le second existe
 pour la parenté, qui n'aura ni le projet ni Python.
 
 ---
 
-## 1 · Sur dellg5 — le serveur local
+## 1 · Sur dellg5 — le serveur local : on clique, c'est enregistré
 
 **Double-cliquez `Serveur_Local.bat`.** Une fenêtre noire s'ouvre et affiche
 une adresse ; le navigateur s'ouvre tout seul sur l'arbre de Samuel.
@@ -13,25 +13,64 @@ une adresse ; le navigateur s'ouvre tout seul sur l'arbre de Samuel.
 **Laissez la fenêtre noire ouverte.** C'est elle, le serveur. La fermer
 arrête tout.
 
-Ensuite, dans le navigateur :
+Depuis C-022, il n'y a plus rien à « enregistrer » : chaque geste est écrit
+dans le projet, l'arbre se refait seul (une à deux secondes) et la page se
+recharge au même endroit.
 
-1. Cliquez un médaillon → la fiche s'ouvre.
-2. **Le portrait** : cliquez dans le rond de la photo. L'explorateur de
-   fichiers s'ouvre, vous choisissez une image.
-3. **La date de naissance** : le bouton « modifier » à côté des dates.
-4. **Photos** et **Recettes** : les sections plus bas, avec leur bouton
-   d'ajout.
-5. En bas de la page, une barre apparaît dès que quelque chose a changé.
-   Le bouton dit **« Enregistrer dans le projet »**.
-6. Cliquez-le. C'est écrit sur le disque. Rien d'autre à faire.
+**Dans l'arbre**
 
-> **Si le bouton dit « Enregistrer mes ajouts »** au lieu de « Enregistrer
-> dans le projet », c'est que la page n'a pas été ouverte par le serveur —
-> vous avez ouvert le fichier directement. Repassez par l'adresse
-> `http://127.0.0.1:8731/`.
+- Cliquez un médaillon → la carte s'ouvre.
+- **Cliquez le visage dans la carte** → choisissez une image → l'arbre se
+  refait, la carte se rouvre avec la nouvelle photo. L'ancien portrait n'est
+  pas effacé : il est rangé dans `photos/_anciens_portraits/`.
+- « En savoir plus » ouvre la fiche complète.
 
-7. Quand vous avez fini : **`Generer_Arbre.bat`** pour que l'arbre
-   affiche les nouveautés, puis fermez la fenêtre du serveur.
+**Dans la fiche**
+
+- **Toute valeur se corrige en cliquant dessus** (ou sur le petit crayon ✎) :
+  naissance, baptême, décès, sépulture — avec leur niveau de certitude et
+  une note —, surnom, variantes du nom, métiers, lieux, notes, faits
+  marquants, recettes, légendes des photos. `Entrée` enregistre, `Échap`
+  annule.
+- Les rubriques vides (« + métier », « + lieu », « + note »…) n'apparaissent
+  que dans ce mode : elles sont là pour être remplies.
+- **Photos** : « + Ajouter des photos », plusieurs d'un coup.
+- **Recettes** : « + Ajouter une recette ».
+- **Faits marquants** : « + Ajouter un fait marquant ». Un fait se rattache
+  à **plusieurs personnes** (un mariage, une traversée, un déménagement) :
+  il apparaît alors sur la fiche de chacune, et dans la carte de l'arbre.
+- Une fiche modifiée prévient l'arbre ouvert dans l'autre onglet, qui se
+  refait aussi.
+
+> **Si rien n'est cliquable** et que le bas de page propose « Enregistrer
+> mes ajouts », la page n'a pas été ouverte par le serveur — vous avez
+> ouvert le fichier directement. Repassez par `http://127.0.0.1:8731/`.
+
+### Le mode administrateur
+
+Bouton **« Administrateur »** en haut à droite d'une fiche, avec le mot de
+passe. Il permet :
+
+- de **remplacer un fait attesté** quand la source a été mal lue ;
+- de **corriger un prénom ou un nom** ;
+- de **retirer** ce qui n'a pas sa place, même s'il vient des sources
+  (fait, section, note, photo, fait marquant) ;
+- de consulter l'**historique** de la fiche et d'y **restaurer** une valeur
+  retirée ou remplacée.
+
+Le mot de passe n'est écrit nulle part en clair : le projet n'en garde
+qu'une empreinte, dans `outils/_admin.json` (hors de git). Pour le changer :
+**`Changer_Mot_De_Passe_Admin.bat`**, puis relancez le serveur. La session
+dure huit heures, ou jusqu'à « Administrateur · quitter ». La version
+partageable ne contient aucune trace de ce mode.
+
+### Rien ne se perd
+
+Toute valeur remplacée ou retirée est consignée dans
+`historique/genealogie_samuel.json`, hors des exports. Ce qu'on a soi-même
+ajouté par l'interface se retire librement ; ce qui vient des sources ne se
+retire qu'en mode administrateur. Une photo retirée est déplacée dans
+`photos/_retirees/`, jamais effacée.
 
 ---
 
@@ -53,9 +92,13 @@ C'est exactement ce qui a été fait le 17 octobre avec vos cinq fichiers.
 ## Ce que le mécanisme refuse de faire
 
 - **Écraser un fait attesté.** Une date tirée d'un acte de paroisse ne se
-  fait pas remplacer par une saisie à la main.
-- **Écraser une photo.** Un second portrait se range à côté, jamais
-  par-dessus.
+  fait pas remplacer par une saisie à la main — sauf en mode
+  administrateur, et l'ancienne lecture reste dans l'historique.
+- **Écraser une photo.** Par le fichier d'ajouts, un second portrait se
+  range à côté ; par le serveur, l'ancien part dans
+  `photos/_anciens_portraits/`. Jamais par-dessus.
+- **Enregistrer du vide.** Une recette sans titre ni texte, une date vide :
+  rien n'est écrit, et la valeur affichée reste la vraie.
 - **Appliquer deux fois le même fichier.** L'empreinte SHA256 est retenue
   dans `photos/_ajouts_appliques.json`. Le 17 octobre, deux fichiers de
   Samuel étaient identiques : le second a été refusé tout seul.

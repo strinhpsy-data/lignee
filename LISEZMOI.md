@@ -248,10 +248,16 @@ rendent un fichier d'ajouts à déposer sur `Appliquer_Ajouts.bat`. C'est le
 mode qui voyage — un parent à qui vous envoyez une branche n'a rien à
 installer.
 
-**Par `Serveur_Local.bat`** : la même page, servie sur `127.0.0.1`, enregistre
-directement dans le projet. Un clic sur le rond du portrait ouvre le
-sélecteur de fichiers ; la photo, la date ou la recette sont rangées
-immédiatement. Fermez la fenêtre noire pour arrêter le serveur.
+**Par `Serveur_Local.bat`** : la même page, servie sur `127.0.0.1`, se
+modifie sur place. Dans l'arbre, un clic sur le visage d'une carte change la
+photo ; dans une fiche, un clic sur n'importe quelle valeur la corrige —
+dates, lieux, métiers, notes, photos, recettes, faits marquants. Chaque
+geste est écrit aussitôt et l'arbre se refait seul. Un mode
+**administrateur** (bouton en haut de la fiche, mot de passe posé par
+`Changer_Mot_De_Passe_Admin.bat`) remplace un fait attesté ou retire ce qui
+n'a pas sa place ; tout reste dans `historique/` et se restaure. Mode
+d'emploi complet : `docs/COMMENT-AJOUTER.md`. Fermez la fenêtre noire pour
+arrêter le serveur.
 
 C'est la **même page** dans les deux cas : elle constate comment elle a été
 ouverte. Il n'y a pas deux versions à maintenir, donc pas de version qu'on

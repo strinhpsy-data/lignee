@@ -41,3 +41,9 @@ _essai_a_jeter/
 # Contributions recues de la famille : elles portent des photos et des dates
 # de naissance. Elles restent locales, comme les donnees qu elles alimentent.
 ajouts-*.json
+
+# Modifications directes (C-021) : historique des valeurs remplacees ou
+# retirees, et empreinte du mot de passe administrateur. Locaux, jamais exportes.
+historique/
+outils/_admin.json
+*.ecriture

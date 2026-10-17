@@ -24,15 +24,22 @@ LES TROIS VERROUS, et pourquoi chacun
      Les noms de fichiers sont fabriqués à partir des identifiants, jamais
      repris de ce que le navigateur envoie.
 
-Bibliothèque standard seule (H-10). Aucune suppression (interdit 2).
+LE MODE ADMINISTRATEUR (C-021). Le mot de passe est vérifié ICI, contre une
+empreinte gardée hors de git (outils/admin.py) ; la page ne le connaît pas.
+Une connexion réussie rend un jeton de session, en mémoire seulement.
+
+Bibliothèque standard seule (H-10). Aucune suppression (interdit 2) : ce
+qu'on retire est déplacé et consigné, voir outils/edition.py.
 
     python outils/serveur.py          (puis le navigateur s'ouvre)
 """
 
 import json
 import secrets
+import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -41,23 +48,132 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "outils"))
 from appliquer_ajouts import appliquer  # noqa: E402  (même dossier)
+import admin as ADMIN                      # noqa: E402
+import edition                             # noqa: E402
 
 JETON = secrets.token_urlsafe(18)
 PORT_SOUHAITE = 8731
 MAX_OCTETS = 80 * 1024 * 1024      # 80 Mo : une poignée de photos, pas un disque
+GENERATEUR = RACINE / "src" / "generer_arbre.py"
+
+# Une seule écriture à la fois : deux modifications simultanées liraient le
+# même fichier et la seconde effacerait la première.
+VERROU = threading.Lock()
+
+# Sessions administrateur : jeton -> échéance. En mémoire seulement ; elles
+# meurent avec le serveur, et le mot de passe ne transite qu'une fois.
+SESSIONS_ADMIN = {}
+DUREE_ADMIN = 8 * 3600
+
+
+def admin_valide(jeton):
+    if not jeton:
+        return False
+    fin = SESSIONS_ADMIN.get(jeton)
+    if not fin or fin < time.time():
+        SESSIONS_ADMIN.pop(jeton, None)
+        return False
+    return True
+
+
+def regenerer(source):
+    """Refait l'arbre et les fiches du fichier modifié, puis -- s'il existe
+    déjà -- la version partageable, pour qu'elle ne retarde pas."""
+    r = subprocess.run([sys.executable, str(GENERATEUR), str(source)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        return False, (r.stderr or r.stdout or "").strip()[-600:]
+    partage = source.with_name(source.stem.replace("genealogie_", "arbre_") + "_partage.html")
+    if partage.exists():
+        # Après la réponse, pas avant : la page qu'on modifie n'attend que
+        # son arbre. La version partageable suit, sous le même verrou.
+        def suite():
+            with VERROU:
+                subprocess.run([sys.executable, str(GENERATEUR), str(source), "--partage"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+        threading.Thread(target=suite, daemon=True).start()
+    return True, ""
 
 
 class Poste(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *a):
-        if "POST" in (a[0] if a else ""):
+        # str() : sur une erreur (404), le premier argument est un code
+        # HTTPStatus et non la ligne de requête ; « in » plantait dessus.
+        if "POST" in (str(a[0]) if a else ""):
             sys.stderr.write("  " + (fmt % a) + "\n")
 
     # ---- le jeton, lisible seulement depuis cette origine ----
     def do_GET(self):
         if self.path == "/_jeton":
-            self.repondre({"jeton": JETON})
+            self.repondre({"jeton": JETON, "admin_possible": ADMIN.configure()})
             return
         super().do_GET()
+
+    def end_headers(self):
+        # Après une modification, la page se recharge : elle doit relire le
+        # fichier régénéré, pas une copie gardée par le navigateur.
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def lire_demande(self):
+        """Les trois verrous d'une écriture : type JSON, jeton, taille."""
+        if "application/json" not in (self.headers.get("Content-Type") or ""):
+            self.repondre({"erreur": "type attendu : application/json"}, 415); return None
+        if self.headers.get("X-Jeton") != JETON:
+            self.repondre({"erreur": "jeton absent ou faux"}, 403); return None
+        taille = int(self.headers.get("Content-Length") or 0)
+        if taille <= 0 or taille > MAX_OCTETS:
+            self.repondre({"erreur": f"taille refusée ({taille} octets)"}, 413); return None
+        try:
+            return json.loads(self.rfile.read(taille).decode("utf-8"))
+        except Exception as e:
+            self.repondre({"erreur": f"JSON illisible : {e}"}, 400); return None
+
+    def modifier(self):
+        a = self.lire_demande()
+        if a is None:
+            return
+        admin = admin_valide(self.headers.get("X-Admin"))
+        with VERROU:
+            try:
+                msg, source = edition.executer(a, admin=admin)
+            except edition.Refus as e:
+                self.repondre({"ok": False, "erreur": str(e)}); return
+            except Exception as e:
+                self.repondre({"ok": False, "erreur": f"{type(e).__name__} : {e}"}, 500); return
+            if msg == "rien à changer":
+                self.repondre({"ok": True, "message": msg, "inchange": True}); return
+            ok, err = regenerer(source)
+        sys.stderr.write(f"  modifié : {a.get('op')} {a.get('pid') or a.get('id') or ''} -- {msg}\n")
+        self.repondre({"ok": True, "message": msg, "regenere": ok,
+                       "avertissement": None if ok else "données enregistrées, mais "
+                       "la régénération a échoué : " + err})
+
+    def connexion_admin(self):
+        a = self.lire_demande()
+        if a is None:
+            return
+        if not ADMIN.configure():
+            self.repondre({"ok": False, "erreur": "aucun mot de passe posé -- lancez "
+                           "Changer_Mot_De_Passe_Admin.bat"}); return
+        if not ADMIN.verifier(a.get("motdepasse")):
+            time.sleep(1.2)          # freine qui essaierait au hasard
+            self.repondre({"ok": False, "erreur": "mot de passe refusé"}); return
+        j = secrets.token_urlsafe(24)
+        SESSIONS_ADMIN[j] = time.time() + DUREE_ADMIN
+        self.repondre({"ok": True, "admin": j})
+
+    def historique(self):
+        a = self.lire_demande()
+        if a is None:
+            return
+        if not admin_valide(self.headers.get("X-Admin")):
+            self.repondre({"ok": False, "erreur": "réservé au mode administrateur"}); return
+        try:
+            self.repondre({"ok": True,
+                           "entrees": edition.historique_de(a.get("source"), a.get("pid"))})
+        except edition.Refus as e:
+            self.repondre({"ok": False, "erreur": str(e)})
 
     def repondre(self, obj, code=200):
         corps = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -68,6 +184,15 @@ class Poste(SimpleHTTPRequestHandler):
         self.wfile.write(corps)
 
     def do_POST(self):
+        if self.path == "/_modifier":
+            self.modifier(); return
+        if self.path == "/_admin":
+            self.connexion_admin(); return
+        if self.path == "/_admin_sortir":
+            SESSIONS_ADMIN.pop(self.headers.get("X-Admin"), None)
+            self.repondre({"ok": True}); return
+        if self.path == "/_historique":
+            self.historique(); return
         if self.path != "/_ajouts":
             self.repondre({"erreur": "chemin inconnu"}, 404); return
 
@@ -144,9 +269,12 @@ def main():
     print(f"\n  {url}\n")
     print("  Écoute sur 127.0.0.1 seulement : rien d'autre que cet")
     print("  ordinateur ne peut l'atteindre.")
-    print("\n  Les fiches ouvertes PAR CETTE ADRESSE enregistrent directement.")
+    print("\n  Les fiches ouvertes PAR CETTE ADRESSE se modifient sur place :")
+    print("  un clic sur une valeur, on corrige, l'arbre se refait seul.")
     print("  Ouvertes par double-clic, elles rendent un fichier d'ajouts,")
     print("  comme avant — c'est ce qui permet de les envoyer à la parenté.")
+    if not ADMIN.configure():
+        print("\n  (Mode administrateur indisponible : aucun mot de passe posé.)")
     print("\n  Fermez cette fenêtre pour arrêter le serveur.")
     print("-" * 62)
     threading.Timer(0.7, lambda: webbrowser.open(url)).start()
