@@ -405,6 +405,16 @@ function construireHaut(id, vu, branche){
   const parents = (u ? u.conjoints : []).filter(c=>!vu.has(c));
   const noeud = { id, conjoints: [], groupes: [], enfants: [], branche };
   if(branche) BRANCHE_PERS[id] = branche;
+  /* La fratrie. Un arbre ascendant ne montre que des ancêtres, et les
+     frères et soeurs n'en sont pas : sans ce relevé, Vincent, les oncles
+     Trịnh et les onze frères et soeurs de Fernande sont dans les données
+     et invisibles à l'écran. On les pose à côté, dans la même rangée, sans
+     leur descendance — c'est une fratrie qu'on veut voir, pas un deuxième
+     arbre. */
+  if(u && (u.enfants||[]).length > 1){
+    noeud.fratrie = u.enfants.filter(e => e !== id && P[e]);
+    noeud.rang = u.enfants.indexOf(id);
+  }
   if(u && parents.length){
     const sous = parents.map(p=>construireHaut(p, vu, BRANCHE_DE[p] || branche))
                         .filter(Boolean);
@@ -527,7 +537,31 @@ function poserPuces(n){
 }
 if(MONTANT) racines.filter(Boolean).forEach(poserPuces);
 
-function taillePuces(n, pas, ecart){ const k=1+n.conjoints.length; return k*pas + (k-1)*ecart; }
+function taillePuces(n, pas, ecart){
+  const k = 1 + n.conjoints.length + ((n.fratrie||[]).length);
+  return k*pas + (k-1)*ecart;
+}
+
+/* La rangée d'un noeud, dans l'ordre : la fratrie telle que la source
+   l'énumère — donc par ordre de naissance — puis les conjoints. La personne
+   de la lignée garde sa place parmi ses frères et soeurs ; la sortir pour la
+   mettre en tête mentirait sur son rang. */
+function rangee(n){
+  const f = n.fratrie || [];
+  const ordre = [];
+  if(f.length){
+    const rang = Math.max(0, Math.min(n.rang === undefined ? 0 : n.rang, f.length));
+    for(let i = 0; i < f.length; i++){
+      if(i === rang) ordre.push({id:n.id, focal:true});
+      ordre.push({id:f[i], fratrie:true});
+    }
+    if(rang >= f.length) ordre.push({id:n.id, focal:true});
+  }else{
+    ordre.push({id:n.id, focal:true});
+  }
+  n.conjoints.forEach(c => ordre.push({id:c.id, union:c.union}));
+  return ordre;
+}
 
 /* -- portraits : l'axe principal est horizontal, les générations descendent -- */
 function mesurerV(n){
@@ -547,9 +581,12 @@ function placerV(n, gauche, y){
     const c=(a.pivot+b.pivot)/2;
     n.debut = Math.min(Math.max(c-lp/2, gauche), gauche+n.taille-lp);
   }
-  n.puces = [{id:n.id, x:n.debut, y:y}];
-  n.conjoints.forEach((c,i)=>n.puces.push({id:c.id, x:n.debut+(i+1)*(MED_L+MED_EP), y:y, union:c.union}));
-  n.pivot = n.debut + MED_L/2;
+  n.puces = rangee(n).map((e,i)=>Object.assign({}, e,
+      {x:n.debut + i*(MED_L+MED_EP), y:y}));
+  const moi = n.puces.find(p=>p.focal) || n.puces[0];
+  /* Le trait vers les parents part de la personne de la lignée, pas du
+     milieu de la rangée : sinon il viserait un frère. */
+  n.pivot = moi.x + MED_L/2;
   n.centre = n.debut + lp/2;
 }
 
@@ -571,9 +608,10 @@ function placerH(n, haut, x){
     const c=(a.pivot+b.pivot)/2;
     n.debut = Math.min(Math.max(c-hp/2, haut), haut+n.taille-hp);
   }
-  n.puces = [{id:n.id, x:x, y:n.debut}];
-  n.conjoints.forEach((c,i)=>n.puces.push({id:c.id, x:x, y:n.debut+(i+1)*(FIC_H+FIC_EP), union:c.union}));
-  n.pivot = n.debut + FIC_H/2;
+  n.puces = rangee(n).map((e,i)=>Object.assign({}, e,
+      {x:x, y:n.debut + i*(FIC_H+FIC_EP)}));
+  const moiH = n.puces.find(p=>p.focal) || n.puces[0];
+  n.pivot = moiH.y + FIC_H/2;
   n.centre = n.debut + hp/2;
 }
 
@@ -781,8 +819,8 @@ function bouton(n, cx, cy){
 function dessinerV(n, detache){
   n.puces.forEach((pu,i)=>{
     puceMedaillon(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache, n.branche);
-    if(i>0){
-      const u=pu.union||{}, d=!!u.lignee;
+    if(i>0 && pu.union){
+      const u=pu.union, d=!!u.lignee;
       const ym=pu.y+RAYON+4;
       const x1=n.puces[i-1].x+MED_L/2+RAYON, x2=pu.x+MED_L/2-RAYON;
       couchLiens.appendChild(el("path",{class:"alliance"+(d?" directe":""), d:`M ${x1} ${ym} H ${x2}`}));
@@ -815,8 +853,8 @@ function dessinerV(n, detache){
 function dessinerH(n, detache){
   n.puces.forEach((pu,i)=>{
     puceFiche(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache, n.branche);
-    if(i>0){
-      const u=pu.union||{}, d=!!u.lignee, xm=n.x+24;
+    if(i>0 && pu.union){
+      const u=pu.union, d=!!u.lignee, xm=n.x+24;
       const y1=n.puces[i-1].y+FIC_H, y2=pu.y;
       couchLiens.appendChild(el("path",{class:"alliance"+(d?" directe":""),d:`M ${xm} ${y1} V ${y2}`}));
       const lab=(u.mariage&&u.mariage.texte)?u.mariage.texte.match(/(1[5-9]\d{2})/):null;

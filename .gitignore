@@ -37,3 +37,7 @@ transcription/
 genealogie_*_brouillon.json
 genealogie_samuel.json
 _essai_a_jeter/
+
+# Contributions recues de la famille : elles portent des photos et des dates
+# de naissance. Elles restent locales, comme les donnees qu elles alimentent.
+ajouts-*.json

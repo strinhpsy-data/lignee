@@ -46,17 +46,36 @@ def decoder(url):
     return EXT.get(m.group(1), ".jpg"), base64.b64decode(m.group(2))
 
 
-def libre(base, ext):
-    """Un nom de fichier encore libre. On n'écrase jamais : une photo
-    remplacée est une photo perdue, et l'utilisateur n'a rien demandé de
-    tel."""
-    p = PHOTOS / (base + ext)
-    if not p.exists():
-        return p, None
-    for n in range(2, 60):
+EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff")
+
+
+def nom_nu_pris(base):
+    """Le nom sans numéro est-il déjà employé, QUELLE QUE SOIT l'extension ?
+
+    Le générateur cherche le portrait en essayant les extensions dans
+    l'ordre, « .jpg » d'abord. Une photo de galerie installée sous
+    « samuel-trinh.jpg » passait donc devant le vrai portrait
+    « samuel-trinh.png » : c'est l'ordre alphabétique des extensions qui
+    choisissait le visage, c'est-à-dire le hasard."""
+    return any((PHOTOS / (base + e)).exists() for e in EXTENSIONS)
+
+
+def place(base, ext, portrait):
+    """Où ranger une image, sans jamais en écraser une autre.
+
+    Le nom nu est RÉSERVÉ au portrait : une photo de galerie va toujours
+    dans un emplacement numéroté, même si le nom nu est libre."""
+    if portrait:
+        if not nom_nu_pris(base):
+            return PHOTOS / (base + ext), None
+        occupe = next((PHOTOS / (base + e) for e in EXTENSIONS
+                       if (PHOTOS / (base + e)).exists()), None)
+    else:
+        occupe = None
+    for n in range(2, 200):
         q = PHOTOS / f"{base}-{n}{ext}"
         if not q.exists():
-            return q, p
+            return q, occupe
     raise RuntimeError("trop de photos pour " + base)
 
 
@@ -122,7 +141,7 @@ def appliquer(chemin, force=False):
     if a.get("portrait"):
         ext, octets = decoder(a["portrait"]["donnee"])
         if octets:
-            cible, occupe = libre(pid, ext)
+            cible, occupe = place(pid, ext, portrait=True)
             cible.write_bytes(octets)
             photos_ecrites.append(cible.name)
             if occupe:
@@ -134,7 +153,7 @@ def appliquer(chemin, force=False):
         ext, octets = decoder(ph.get("donnee"))
         if not octets:
             continue
-        cible, _ = libre(pid, ext)
+        cible, _ = place(pid, ext, portrait=False)
         cible.write_bytes(octets)
         photos_ecrites.append(cible.name)
         if ph.get("legende"):
