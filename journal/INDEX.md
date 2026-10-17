@@ -23,3 +23,4 @@ il doit suffire à savoir où regarder.
 | `C-016` | 2026-10-16 | Wilfred n'est qu'un prêt ; l'arbre de Samuel devient le projet ; chaînon manquant trouvé | aucun |
 | `C-017` | 2026-10-17 | Cinq contributions appliquées, portrait réparé, fratrie rendue visible | aucun — `tests/` inchangé |
 | `C-018` | 2026-10-17 | Paul-Émile Jean retrouvé page 279 ; vue recentrée sur le pivot (translate NaN) | aucun — `tests/` inchangé |
+| `C-019` | 2026-10-17 | Le serveur local ouvrait arbre_jean ; mode d'emploi des ajouts | aucun — `tests/` inchangé |

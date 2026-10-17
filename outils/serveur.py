@@ -124,8 +124,18 @@ def main():
     else:
         print("Aucun port libre entre 8731 et 8742."); return 2
 
-    arbres = sorted(RACINE.glob("arbre_*.html"))
-    page = arbres[0].name if arbres else ""
+    # Quel arbre ouvrir. L'ordre alphabetique donnait arbre_jean.html --
+    # le premier arbre du projet, plus l'arbre par defaut depuis le
+    # 16 octobre. On ouvrait donc la mauvaise genealogie, en silence.
+    # L'arbre par defaut d'abord ; sinon le plus recemment genere.
+    arbres = list(RACINE.glob("arbre_*.html"))
+    defaut = RACINE / "arbre_samuel.html"
+    if defaut.exists():
+        page = defaut.name
+    elif arbres:
+        page = max(arbres, key=lambda f: f.stat().st_mtime).name
+    else:
+        page = ""
     url = f"http://127.0.0.1:{port}/{page}"
 
     print("=" * 62)
