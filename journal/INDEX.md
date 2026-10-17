@@ -25,3 +25,4 @@ il doit suffire à savoir où regarder.
 | `C-018` | 2026-10-17 | Paul-Émile Jean retrouvé page 279 ; vue recentrée sur le pivot (translate NaN) | aucun — `tests/` inchangé |
 | `C-019` | 2026-10-17 | Le serveur local ouvrait arbre_jean ; mode d'emploi des ajouts | aucun — `tests/` inchangé |
 | `C-020` | 2026-10-17 | Generer_Arbre.bat ouvre son résultat ; .bat passés en CRLF | aucun — `tests/` inchangé |
+| `C-021` | 2026-10-17 | Passation vers Claude Code ; deux défauts des fiches contributives | aucun — `tests/` inchangé |
