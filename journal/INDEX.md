@@ -22,3 +22,4 @@ il doit suffire à savoir où regarder.
 | `C-015` | 2026-10-16 | Interdit sur l'export seul, et rendu mesurable — T-37 à T-40 | **T-37 à T-41 ajoutés**, empreinte reposée |
 | `C-016` | 2026-10-16 | Wilfred n'est qu'un prêt ; l'arbre de Samuel devient le projet ; chaînon manquant trouvé | aucun |
 | `C-017` | 2026-10-17 | Cinq contributions appliquées, portrait réparé, fratrie rendue visible | aucun — `tests/` inchangé |
+| `C-018` | 2026-10-17 | Paul-Émile Jean retrouvé page 279 ; vue recentrée sur le pivot (translate NaN) | aucun — `tests/` inchangé |

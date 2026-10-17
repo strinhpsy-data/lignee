@@ -935,7 +935,16 @@ function vueInitiale(){
   const tient=Math.min((r.width-80)/b.width,(r.height-80)/b.height);
   if(tient>=.8){ recadrer(); return; }
   ech=.82;
-  const c=ancNode||principal;
+  /* Sur quoi la vue s'ouvre. Dans un arbre montant, c'est le pivot : la
+     demande est que Samuel reste centré à chaque ouverture. ancNode ne
+     convient que dans un arbre descendant, où il porte l'extrait rattaché.
+     Et il faut qu'il ait VRAIMENT été placé : ancNode se cherche dans
+     n.enfants au complet, alors que placerV ne descend que par enf(n), les
+     niveaux ouverts. Un ancêtre replié n'a pas de pivot, et la vue entière
+     partait alors sur translate(NaN) — l'arbre s'affichait sans erreur de
+     script, décalé hors du cadre. */
+  const place = x => x && Number.isFinite(mode==="portraits" ? x.pivot : x.x);
+  const c = (!MONTANT && place(ancNode)) ? ancNode : principal;
   const cx = (mode==="portraits") ? c.pivot : c.x+FIC_L/2;
   const cy = (mode==="portraits") ? c.y+MED_H/2 : c.pivot;
   tx = (b.width*ech  <= r.width-70)  ? (r.width -b.width *ech)/2 - b.x*ech : r.width*0.40 - cx*ech;
