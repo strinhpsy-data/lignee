@@ -145,6 +145,7 @@ header{
   stroke:var(--or)}
 .plier.ferme text{fill:var(--or)}
 .plier:hover rect{stroke:var(--or); stroke-width:2}
+.plier.fratrie rect{stroke-dasharray:3 2}
 .anneau{fill:none; stroke-width:3.2; transition:stroke-width .14s}
 .puce.fr .anneau{stroke:var(--fr)}
 .j-br{font-weight:600}
@@ -343,6 +344,7 @@ header{
     <button class="btn" id="b-pb" aria-pressed="false" title="Divergences et lacunes du document source">Problèmes <span id="n-pb"></span></button>
     <button class="btn rond" id="b-moins" title="Dézoomer">&minus;</button>
     <button class="btn rond" id="b-plus" title="Zoomer">+</button>
+    <button class="btn" id="b-fratrie" aria-pressed="true" title="Afficher ou masquer les frères et sœurs" hidden>Fratrie</button>
     <button class="btn" id="b-replier" title="Ne garder que les deux premières générations">Replier</button>
     <button class="btn" id="b-reset" title="Tout revoir">Recadrer</button>
     <button class="btn rond" id="b-theme" title="Clair / sombre">◐</button>
@@ -505,6 +507,36 @@ function basculer(id){
   rendre(true);
 }
 
+/* Redessiner sans que la personne visée bouge à l'écran. Replier une
+   fratrie de douze resserre toute la rangée : en gardant la vue telle
+   quelle, l'arbre entier glissait hors du cadre (constaté au premier
+   essai). On mesure la personne avant, on la remet au même endroit après. */
+function rendreAncre(id){
+  const avant = indexPuces[id] && indexPuces[id].getBoundingClientRect();
+  rendre(true);
+  const apres = indexPuces[id] && indexPuces[id].getBoundingClientRect();
+  if(avant && apres){ tx += avant.left-apres.left; ty += avant.top-apres.top; appliquer(); }
+}
+function basculerFratrie(id){
+  const n = indexNoeuds[id];
+  if(!n || !(n.fratrie||[]).length) return;
+  n.fratrieCachee = !n.fratrieCachee;
+  majBoutonFratrie();
+  rendreAncre(id);
+}
+/* Rendre visible une personne, qu'elle soit dans la lignée (on ouvre le
+   chemin) ou dans une fratrie repliée (on ouvre le chemin du frère ou de
+   la soeur de la lignée, puis sa fratrie). */
+function reveler(id){
+  if(indexNoeuds[id]) return ouvrirChemin(id);
+  const n = Object.values(indexNoeuds).find(x=>(x.fratrie||[]).includes(id));
+  if(!n) return false;
+  ouvrirChemin(n.id);
+  n.fratrieCachee = false;
+  majBoutonFratrie();
+  return true;
+}
+
 /* Ouvre tout le chemin de la racine jusqu'à une personne. Sans cela, la
    recherche ne trouve rien de ce qui est replié, et l'utilisateur conclut
    que la personne n'est pas dans l'arbre. */
@@ -522,6 +554,21 @@ function poserParents(n){ (n.enfants||[]).forEach(e=>{ e.parent = n; poserParent
 function replierTout(){
   Object.values(indexNoeuds).forEach(n=>{ n.ouvert = n.prof < PROFONDEUR_INITIALE; });
   rendre(false);
+}
+/* Le bouton « Fratrie » de la barre : tout montrer ou tout replier d'un
+   coup. Il reflète l'état : enfoncé tant qu'au moins une fratrie est
+   visible. */
+const AVEC_FRATRIE = Object.values(indexNoeuds).filter(n=>(n.fratrie||[]).length);
+function majBoutonFratrie(){
+  const b=document.getElementById("b-fratrie"); if(!b) return;
+  b.hidden = !AVEC_FRATRIE.length;
+  b.setAttribute("aria-pressed", AVEC_FRATRIE.some(n=>!n.fratrieCachee));
+}
+function basculerToutesFratries(){
+  const montrer = !AVEC_FRATRIE.some(n=>!n.fratrieCachee);
+  AVEC_FRATRIE.forEach(n=>{ n.fratrieCachee = !montrer; });
+  majBoutonFratrie();
+  rendreAncre(selection && indexNoeuds[selection] ? selection : principal.id);
 }
 const ancNode = (function t(n){ if(P[n.id]&&P[n.id].ancetre) return n;
   for(const e of (n.enfants||[])){ const r=t(e); if(r) return r; } return null; })(principal);
@@ -547,8 +594,13 @@ function poserPuces(n){
 }
 if(MONTANT) racines.filter(Boolean).forEach(poserPuces);
 
+/* La fratrie se replie comme les ascendants (C-023). Repliée, elle ne
+   compte plus dans la largeur de la rangée : la disposition se resserre
+   d'elle-même, comme pour un noeud fermé. */
+function fra(n){ return n.fratrieCachee ? [] : (n.fratrie||[]); }
+
 function taillePuces(n, pas, ecart){
-  const k = 1 + n.conjoints.length + ((n.fratrie||[]).length);
+  const k = 1 + n.conjoints.length + fra(n).length;
   return k*pas + (k-1)*ecart;
 }
 
@@ -557,7 +609,7 @@ function taillePuces(n, pas, ecart){
    de la lignée garde sa place parmi ses frères et soeurs ; la sortir pour la
    mettre en tête mentirait sur son rang. */
 function rangee(n){
-  const f = n.fratrie || [];
+  const f = fra(n);
   const ordre = [];
   if(f.length){
     const rang = Math.max(0, Math.min(n.rang === undefined ? 0 : n.rang, f.length));
@@ -828,6 +880,27 @@ function bouton(n, cx, cy){
   return g;
 }
 
+/* Le bouton de fratrie : même forme que celui des ascendants, mais posé
+   sous la personne de la lignée (au-dessus, c'est la place des parents) et
+   en pointillé, pour que les deux gestes ne se confondent pas. */
+function boutonFratrie(n, cx, cy){
+  const nb = (n.fratrie||[]).length;
+  if(!nb) return;
+  const ferme = !!n.fratrieCachee;
+  const texte = ferme ? ("+"+nb+(mode==="portraits" ? (nb>1?" frères et sœurs":" frère ou sœur") : ""))
+                      : (mode==="portraits" ? "− fratrie" : "−");
+  const larg = Math.max(22, 11 + texte.length*(mode==="portraits"?5.6:7.2));
+  const g = el("g",{class:"plier fratrie"+(ferme?" ferme":""),"data-fratrie":n.id,
+                    transform:`translate(${cx-larg/2},${cy})`});
+  const t = el("title",{}); t.textContent = ferme ? "Afficher la fratrie" : "Masquer la fratrie";
+  g.appendChild(t);
+  g.appendChild(el("rect",{x:0,y:0,width:larg,height:16,rx:8}));
+  const tx = el("text",{x:larg/2,y:11.5,"text-anchor":"middle"});
+  tx.textContent = texte; g.appendChild(tx);
+  g.addEventListener("click", ev=>{ ev.stopPropagation(); basculerFratrie(n.id); });
+  couchPuces.appendChild(g);
+}
+
 function dessinerV(n, detache){
   n.puces.forEach((pu,i)=>{
     puceMedaillon(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache, n.branche);
@@ -842,6 +915,7 @@ function dessinerV(n, detache){
     }
   });
   if(n.total) bouton(n, n.pivot, SENS>0 ? n.y+MED_H+10 : n.y-26);
+  if(SENS<0) boutonFratrie(n, n.pivot, n.y+MED_H+2);
   grp(n).forEach((gr,gi)=>{
     if(!gr.enfants.length) return;
     const idx=n.puces.findIndex(pu=>pu.union===gr.union);
@@ -875,6 +949,7 @@ function dessinerH(n, detache){
     }
   });
   if(n.total) bouton(n, n.x+FIC_L+13, n.debut+FIC_H/2);
+  boutonFratrie(n, n.x-27, n.pivot+6);
   grp(n).forEach((gr,gi)=>{
     if(!gr.enfants.length) return;
     const idx=n.puces.findIndex(pu=>pu.union===gr.union);
@@ -1000,6 +1075,8 @@ function zoomer(f){
 document.getElementById("b-plus").onclick=()=>zoomer(1.25);
 document.getElementById("b-moins").onclick=()=>zoomer(.8);
 document.getElementById("b-replier").onclick=replierTout;
+document.getElementById("b-fratrie").onclick=basculerToutesFratries;
+majBoutonFratrie();
 document.getElementById("b-reset").onclick=recadrer;
 toile.addEventListener("click",()=>{ if(!aBouge) fermerFiche(); aBouge=false; });
 
@@ -1108,6 +1185,7 @@ function ouvrirFiche(id){
     e.stopPropagation();
     const w=a.getAttribute("data-va");
     if(!P[w]) return;
+    if(!indexPuces[w] && reveler(w)) rendre(true);
     if(indexPuces[w]){ centrer(w); setTimeout(()=>ouvrirFiche(w),170); } else ouvrirFiche(w);
   }));
   positionnerFiche(id);
@@ -1226,8 +1304,7 @@ function chercher(){
      jeté, et le compteur restait vide alors que la recherche avait bien
      trouvé. Le défaut ne se voyait qu'en cherchant pour de vrai. */
   let ouvert=false;
-  assortis.forEach(id=>{ if(indexNoeuds[id] && !indexPuces[id]){
-    if(ouvrirChemin(id)) ouvert=true; } });
+  assortis.forEach(id=>{ if(!indexPuces[id] && reveler(id)) ouvert=true; });
   if(ouvert) redessine(true);
   let n=0;
   Object.entries(indexPuces).forEach(([id,g])=>{
@@ -1345,7 +1422,7 @@ rendre(false);
   try{ v=JSON.parse(sessionStorage.getItem("vue-arbre")||"null"); sessionStorage.removeItem("vue-arbre"); }catch(e){}
   if(!v) return;
   if(v.mode&&v.mode!==mode) setMode(v.mode);
-  if(v.sel&&indexNoeuds[v.sel]&&!indexPuces[v.sel]){ ouvrirChemin(v.sel); rendre(true); }
+  if(v.sel&&!indexPuces[v.sel]&&reveler(v.sel)) rendre(true);
   if([v.tx,v.ty,v.ech].every(Number.isFinite)){ tx=v.tx; ty=v.ty; ech=v.ech; appliquer(); }
   if(v.sel&&P[v.sel]) ouvrirFiche(v.sel);
   try{ const m=sessionStorage.getItem("avis-arbre"); if(m){ sessionStorage.removeItem("avis-arbre");
