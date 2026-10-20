@@ -28,3 +28,4 @@ il doit suffire à savoir où regarder.
 | `C-021` | 2026-10-17 | Passation vers Claude Code ; deux défauts des fiches contributives | aucun — `tests/` inchangé |
 | `C-022` | 2026-10-17 | Modification sur place des fiches, mode administrateur, faits marquants partagés ; D-1 et D-2 corrigés | aucun — `tests/` inchangé |
 | `C-023` | 2026-10-19 | La fratrie s'affiche et se masque comme les ascendants | aucun — `tests/` inchangé |
+| `C-024` | 2026-10-19 | Conjoint(e) significatif(ve) ; deux serveurs sur le même port sous Windows | aucun — `tests/` inchangé |

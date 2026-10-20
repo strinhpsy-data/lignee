@@ -35,6 +35,8 @@ qu'on retire est déplacé et consigné, voir outils/edition.py.
 """
 
 import json
+import os
+import socket
 import secrets
 import subprocess
 import sys
@@ -237,12 +239,27 @@ class Poste(SimpleHTTPRequestHandler):
         self.send_response(405); self.end_headers()
 
 
+class Serveur(ThreadingHTTPServer):
+    """Un port déjà pris doit être REFUSÉ. http.server pose
+    SO_REUSEADDR, et sous Windows cette option laisse un second serveur
+    s'installer sur un port occupé, sans erreur : deux Serveur_Local
+    écoutaient alors sur 8731, et le navigateur parlait à l'un ou à l'autre
+    au hasard -- y compris à celui d'un autre dossier (C-024). On
+    demande l'usage exclusif, et la recherche d'un port libre joue enfin."""
+    allow_reuse_address = os.name != "nt"
+
+    def server_bind(self):
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def main():
     gest = partial(Poste, directory=str(RACINE))
     port = PORT_SOUHAITE
     for essai in range(12):
         try:
-            srv = ThreadingHTTPServer(("127.0.0.1", port), gest)
+            srv = Serveur(("127.0.0.1", port), gest)
             break
         except OSError:
             port += 1

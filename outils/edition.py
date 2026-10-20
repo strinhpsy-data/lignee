@@ -32,6 +32,7 @@ import json
 import re
 import secrets
 import shutil
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -562,6 +563,133 @@ def op_evenement(d, h, a, admin):
     return "fait marquant enregistré"
 
 
+NATURES = ("conjoint", "mariage")
+
+
+def identifiant(d, prenom, nom, an):
+    """Un identifiant neuf, à la façon des autres : prenom-nom-annee, sans
+    accents. Jamais réutilisé : un suffixe s'ajoute s'il est pris."""
+    brut = " ".join(x for x in (prenom, nom, str(an or "")) if x)
+    plat = unicodedata.normalize("NFD", brut.replace("đ", "d").replace("Đ", "D"))
+    plat = "".join(c for c in plat if not unicodedata.combining(c)).lower()
+    base = re.sub(r"[^a-z0-9]+", "-", plat).strip("-") or "personne"
+    pid, n = base, 2
+    while pid in d["personnes"]:
+        pid, n = f"{base}-{n}", n + 1
+    return pid
+
+
+def op_conjoint(d, h, a, admin):
+    """Un(e) conjoint(e) — significatif(ve) ou marié(e) — pour une personne.
+
+    La personne rattachée est soit déjà dans les données (« personne »),
+    soit créée ici (« nouvelle » : prénom, nom, naissance, sexe). L'union
+    porte « nature » : « conjoint » pour un(e) conjoint(e) significatif(ve),
+    « mariage » sinon, et « debut » pour la date ou la période."""
+    pid = a.get("pid")
+    _personne(d, pid)
+    unions = d.setdefault("unions", [])
+    uid = a.get("union")
+
+    if uid:
+        u = next((x for x in unions if x.get("id") == uid), None)
+        if u is None or pid not in u.get("conjoints", []):
+            raise Refus("union introuvable — rechargez la page")
+
+        if a.get("retrait"):
+            if not (admin or u.get("ajout")):
+                _admin_requis(False, "retirer une union qui vient des sources")
+            if u.get("enfants"):
+                raise Refus("cette union a des enfants : on ne la retire pas d'ici")
+            unions.remove(u)
+            # La personne créée avec l'union part avec elle si plus rien ne
+            # la relie à l'arbre ; elle reste dans l'historique.
+            partie = None
+            autre = next((c for c in u["conjoints"] if c != pid), None)
+            if autre and d["personnes"].get(autre, {}).get("ajout") and not any(
+                    autre in x.get("conjoints", []) or autre in (x.get("enfants") or [])
+                    for x in unions):
+                partie = {"id": autre, "donnees": d["personnes"].pop(autre)}
+            h.noter(pid=pid, champ="unions", action="retrait",
+                    ancien={"union": u, "personne": partie}, nouveau=None, admin=admin,
+                    personnes=u["conjoints"], motif=a.get("motif"))
+            return "union retirée"
+
+        nature = a.get("nature") or u.get("nature") or "mariage"
+        if nature not in NATURES:
+            raise Refus("nature d'union inconnue")
+        if not (admin or u.get("ajout")) and nature != (u.get("nature") or "mariage"):
+            _admin_requis(False, "changer la nature d'une union lue dans les sources")
+        ancien = json.loads(json.dumps(u))
+        texte = texte_propre(a.get("debut"), 300)
+        cle = "mariage" if nature == "mariage" else "debut"
+        for k in ("mariage", "debut"):
+            if k != cle and k in u and (u.get("ajout") or admin):
+                u.pop(k)
+        if texte:
+            if (u.get(cle) or {}).get("certitude") == "attestee" and u[cle].get("texte") != texte:
+                _admin_requis(admin, "remplacer une date d'union attestée")
+            u[cle] = {"texte": texte, "certitude": certitude_devinee(texte)}
+        if nature == "conjoint":
+            u["nature"] = "conjoint"
+        else:
+            u.pop("nature", None)
+        note = texte_propre(a.get("note"), 1000)
+        if note and note not in (u.get("notes") or []):
+            u.setdefault("notes", []).append(note)
+        if u == ancien:
+            return "rien à changer"
+        h.noter(pid=pid, champ="unions", action="modification", ancien=ancien,
+                nouveau=json.loads(json.dumps(u)), admin=admin, personnes=u["conjoints"])
+        return "union enregistrée"
+
+    # ---- ajout ----
+    nature = a.get("nature") or "conjoint"
+    if nature not in NATURES:
+        raise Refus("nature d'union inconnue")
+    autre = a.get("personne")
+    creee = None
+    if autre:
+        _personne(d, autre)
+        if autre == pid:
+            raise Refus("une personne n'est pas sa propre conjointe")
+        if any(set(u.get("conjoints", [])) == {pid, autre} for u in unions):
+            raise Refus("ces deux personnes sont déjà unies dans l'arbre")
+    else:
+        n = a.get("nouvelle") or {}
+        prenom = texte_propre(n.get("prenom"), 120)
+        nom = texte_propre(n.get("nom"), 120)
+        if not (prenom or nom):
+            raise Refus("donnez au moins un prénom ou un nom, ou choisissez une personne de l'arbre")
+        naissance = texte_propre(n.get("naissance"), 300)
+        autre = identifiant(d, prenom, nom, annee(naissance))
+        p = {"prenom": prenom, "nom": nom, "sexe": n.get("sexe") if n.get("sexe") in ("F", "M") else "",
+             "sources": ["Ajout par la fiche, " + maintenant()[:10]], "ajout": True}
+        if not p["sexe"]:
+            p.pop("sexe")
+        if naissance:
+            p["naissance"] = {"texte": naissance, "certitude": certitude_devinee(naissance)}
+            if annee(naissance):
+                p["naissance"]["tri"] = annee(naissance)
+        d["personnes"][autre] = p
+        creee = autre
+    u = {"id": "u-" + secrets.token_hex(4), "conjoints": [pid, autre], "enfants": [],
+         "ajout": True, "sources": ["Ajout par la fiche, " + maintenant()[:10]]}
+    if nature == "conjoint":
+        u["nature"] = "conjoint"
+    texte = texte_propre(a.get("debut"), 300)
+    if texte:
+        u["mariage" if nature == "mariage" else "debut"] = {
+            "texte": texte, "certitude": certitude_devinee(texte)}
+    note = texte_propre(a.get("note"), 1000)
+    if note:
+        u["notes"] = [note]
+    unions.append(u)
+    h.noter(pid=pid, champ="unions", action="ajout", ancien=None,
+            nouveau={"union": u, "personne_creee": creee}, admin=admin, personnes=[pid, autre])
+    return "conjoint(e) ajouté(e)"
+
+
 def op_restaurer(d, h, a, admin):
     """Remettre ce qu'une entrée de l'historique a remplacé ou retiré."""
     _admin_requis(admin, "restaurer depuis l'historique")
@@ -570,7 +698,23 @@ def op_restaurer(d, h, a, admin):
         raise Refus("déjà restaurée")
     champ, pid, ancien = e.get("champ"), e.get("pid"), e.get("ancien")
 
-    if champ == "evenements":
+    if champ == "unions":
+        unions = d.setdefault("unions", [])
+        if e["action"] == "retrait":
+            pers = (ancien or {}).get("personne")
+            if pers and pers["id"] not in d["personnes"]:
+                d["personnes"][pers["id"]] = pers["donnees"]
+            for c in ancien["union"]["conjoints"]:
+                _personne(d, c)
+            unions.append(ancien["union"])
+        elif e["action"] == "modification":
+            cur = next((x for x in unions if x.get("id") == ancien.get("id")), None)
+            if cur is None:
+                raise Refus("cette union n'existe plus")
+            cur.clear(); cur.update(ancien)
+        else:
+            raise Refus("un ajout se défait en retirant l'élément")
+    elif champ == "evenements":
         evs = d.setdefault("evenements", [])
         if e["action"] == "retrait":
             evs.append(ancien)
@@ -654,6 +798,7 @@ OPERATIONS = {
     "fait": op_fait, "champ": op_champ, "liste": op_liste, "photo": op_photo,
     "recette": op_recette, "section_retrait": op_section_retrait,
     "retrait": op_retrait, "evenement": op_evenement, "restaurer": op_restaurer,
+    "conjoint": op_conjoint,
 }
 
 

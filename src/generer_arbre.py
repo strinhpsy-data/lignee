@@ -132,6 +132,7 @@ header{
 .lien.directe{stroke:var(--or); stroke-width:2.6}
 .alliance{fill:none; stroke:var(--line); stroke-width:1.5}
 .alliance.directe{stroke:var(--or); stroke-width:2.6}
+.alliance.conjoint{stroke-dasharray:6 4}
 .etiq-mariage{font-size:9.8px; fill:var(--faint); font-variant-numeric:tabular-nums}
 .ruban{font-size:11.5px; fill:var(--faint); font-style:italic; letter-spacing:.3px}
 
@@ -409,7 +410,7 @@ function construire(idPivot, vu){
    depuis une seule personne, chacun n'est atteint qu'une fois, et les deux
    familles se rejoignent d'elles-mêmes à l'endroit où elles se sont
    effectivement rencontrées. */
-function construireHaut(id, vu, branche){
+function construireHaut(id, vu, branche, depuis){
   vu = vu || new Set();
   if(vu.has(id)) return null;
   vu.add(id);
@@ -427,8 +428,17 @@ function construireHaut(id, vu, branche){
     noeud.fratrie = u.enfants.filter(e => e !== id && P[e]);
     noeud.rang = u.enfants.indexOf(id);
   }
+  /* Les conjoint(e)s (C-024). L'union d'où vient l'enfant de la lignée
+     est déjà dessinée -- c'est le couple de parents de la rangée du dessous.
+     Les autres unions, elles, n'apparaissaient nulle part : un(e)
+     conjoint(e) significatif(ve) se pose à côté de la personne. */
+  (unionsDe[id]||[]).forEach(un=>{
+    if(depuis && (un.enfants||[]).includes(depuis)) return;
+    const c = un.conjoints.find(x=>x!==id);
+    if(c && P[c] && !vu.has(c)) noeud.conjoints.push({id:c, union:un});
+  });
   if(u && parents.length){
-    const sous = parents.map(p=>construireHaut(p, vu, BRANCHE_DE[p] || branche))
+    const sous = parents.map(p=>construireHaut(p, vu, BRANCHE_DE[p] || branche, id))
                         .filter(Boolean);
     if(sous.length){
       noeud.groupes.push({union:u, enfants:sous});
@@ -621,7 +631,10 @@ function rangee(n){
   }else{
     ordre.push({id:n.id, focal:true});
   }
-  n.conjoints.forEach(c => ordre.push({id:c.id, union:c.union}));
+  /* Les conjoint(e)s se rangent juste après la personne, pas au bout de la
+     fratrie : le trait d'alliance relie deux voisins. */
+  const k = ordre.findIndex(e=>e.focal) + 1;
+  ordre.splice(k, 0, ...n.conjoints.map(c => ({id:c.id, union:c.union})));
   return ordre;
 }
 
@@ -901,16 +914,32 @@ function boutonFratrie(n, cx, cy){
   couchPuces.appendChild(g);
 }
 
+/* L'année d'une union : celle du mariage, ou le début d'une vie commune. */
+function anneeUnion(u){
+  const t=(u.mariage&&u.mariage.texte)||(u.debut&&u.debut.texte)||"";
+  return t.match(/(1[5-9]\d{2}|20\d{2})/);
+}
+
 function dessinerV(n, detache){
   n.puces.forEach((pu,i)=>{
     puceMedaillon(pu.id, pu.x, pu.y, !!(P[pu.id]&&P[pu.id].lignee), detache, n.branche);
     if(i>0 && pu.union){
       const u=pu.union, d=!!u.lignee;
       const ym=pu.y+RAYON+4;
-      const x1=n.puces[i-1].x+MED_L/2+RAYON, x2=pu.x+MED_L/2-RAYON;
-      couchLiens.appendChild(el("path",{class:"alliance"+(d?" directe":""), d:`M ${x1} ${ym} H ${x2}`}));
-      const lab=(u.mariage&&u.mariage.texte)?u.mariage.texte.match(/(1[5-9]\d{2})/):null;
-      if(lab){ const t=el("text",{class:"etiq-mariage",x:(x1+x2)/2,y:ym-7,"text-anchor":"middle"});
+      /* Le trait part de la personne, pas du voisin : avec deux conjoint(e)s,
+         relier le second au premier les donnait pour un couple (C-024). Le
+         premier est voisin, trait droit ; les suivants passent au-dessus. */
+      const moi=n.puces.find(x=>x.focal), prec=n.puces[i-1];
+      const cls="alliance"+(d?" directe":"")+(u.nature==="conjoint"?" conjoint":"");
+      let x1=prec.x+MED_L/2+RAYON, x2=pu.x+MED_L/2-RAYON; let yl=ym-7;
+      if(moi && prec!==moi && prec.union){
+        const k=n.puces.indexOf(pu)-n.puces.indexOf(moi), yh=pu.y-4-(k-2)*5;
+        couchLiens.appendChild(el("path",{class:cls,
+          d:`M ${moi.x+MED_L/2} ${pu.y+4} V ${yh} H ${pu.x+MED_L/2} V ${pu.y+4}`}));
+        x1=x2=(moi.x+pu.x)/2+MED_L/2; yl=yh-4;
+      }else couchLiens.appendChild(el("path",{class:cls, d:`M ${x1} ${ym} H ${x2}`}));
+      const lab=anneeUnion(u);
+      if(lab){ const t=el("text",{class:"etiq-mariage",x:(x1+x2)/2,y:yl,"text-anchor":"middle"});
         t.textContent=lab[1]; couchLiens.appendChild(t); }
     }
   });
@@ -942,8 +971,14 @@ function dessinerH(n, detache){
     if(i>0 && pu.union){
       const u=pu.union, d=!!u.lignee, xm=n.x+24;
       const y1=n.puces[i-1].y+FIC_H, y2=pu.y;
-      couchLiens.appendChild(el("path",{class:"alliance"+(d?" directe":""),d:`M ${xm} ${y1} V ${y2}`}));
-      const lab=(u.mariage&&u.mariage.texte)?u.mariage.texte.match(/(1[5-9]\d{2})/):null;
+      const moi=n.puces.find(x=>x.focal), prec=n.puces[i-1];
+      const cls="alliance"+(d?" directe":"")+(u.nature==="conjoint"?" conjoint":"");
+      if(moi && prec!==moi && prec.union){
+        const k=n.puces.indexOf(pu)-n.puces.indexOf(moi), xg=n.x-6-(k-2)*5;
+        couchLiens.appendChild(el("path",{class:cls,
+          d:`M ${n.x} ${moi.y+FIC_H/2} H ${xg} V ${pu.y+FIC_H/2} H ${n.x}`}));
+      }else couchLiens.appendChild(el("path",{class:cls,d:`M ${xm} ${y1} V ${y2}`}));
+      const lab=anneeUnion(u);
       if(lab){ const t=el("text",{class:"etiq-mariage",x:xm+7,y:(y1+y2)/2+3.5});
         t.textContent=lab[1]; couchLiens.appendChild(t); }
     }
@@ -1126,8 +1161,8 @@ function ouvrirFiche(id){
   }
   (unionsDe[id]||[]).forEach(u=>{
     const a=u.conjoints.find(c=>c!==id);
-    const an=((u.mariage&&u.mariage.texte)||"").match(/(1[5-9]\d{2})/);
-    L.push(`<dt>Union</dt><dd><span class="lien-pers" data-va="${ech2(a)}">`
+    const an=anneeUnion(u);
+    L.push(`<dt>${u.nature==="conjoint"?"Conjoint(e)":"Union"}</dt><dd><span class="lien-pers" data-va="${ech2(a)}">`
       +`${ech2(a?nomComplet(P[a]||{}):"—")}</span>`
       +(an?` <span class="f-compte">${an[1]}</span>`:"")+`</dd>`);
   });
@@ -1969,7 +2004,40 @@ const EDITER = {
       confirmer:"Retirer cette photo de la fiche ?\n\nLe fichier n'est pas effacé : il est rangé dans photos/_retirees et peut être restauré."});
   },
   evenement(el){ editerEvenement(el, val(el) || {}); },
+  union(el){
+    const v = val(el) || {};
+    editeur(el, [
+      {nom:"nature", libelle:"Nature de l'union", type:"select", options:NATURES, valeur:v.nature},
+      {nom:"debut", libelle:"Depuis / date du mariage", valeur:v.debut, aide:"jj-mm-aaaa, une année, « vers 2010 »…"},
+      {nom:"note", libelle:"Ajouter une note (facultative)"}], {
+      enregistrer: r=>envoyer({op:"conjoint", pid:PID, union:v.union, nature:r.nature, debut:r.debut, note:r.note}),
+      retirer: v.enfants ? null : ()=>envoyer({op:"conjoint", pid:PID, union:v.union, retrait:true}),
+      libelleRetirer:"Retirer cette union",
+      note: v.enfants ? "Cette union a des enfants : elle ne se retire pas d'ici." : null});
+  },
 };
+const NATURES = [["conjoint", "conjoint(e) significatif(ve)"], ["mariage", "mariage"]];
+
+/* Un(e) conjoint(e) : une personne déjà dans l'arbre, ou une nouvelle. */
+function ajouterConjoint(b){
+  editeur(b, [
+    {nom:"personne", libelle:"Une personne déjà dans l'arbre", type:"personnes", valeur:[]},
+    {nom:"prenom", libelle:"… ou une nouvelle personne : prénom"},
+    {nom:"nom", libelle:"Nom"},
+    {nom:"naissance", libelle:"Naissance (facultative)", aide:"jj-mm-aaaa, lieu — ou une année"},
+    {nom:"sexe", libelle:"Sexe", type:"select", options:[["", "non précisé"], ["F", "femme"], ["M", "homme"]]},
+    {nom:"nature", libelle:"Nature de l'union", type:"select", options:NATURES, valeur:"conjoint"},
+    {nom:"debut", libelle:"Depuis / date du mariage (facultatif)", aide:"jj-mm-aaaa, une année, « vers 2010 »…"},
+    {nom:"note", libelle:"Note (facultative)"}], {
+    place:"apres", libelleOk:"Ajouter",
+    note:"Choisissez une personne de l'arbre, ou remplissez prénom et nom pour en créer une.",
+    enregistrer: r=>{
+      const d = {op:"conjoint", pid:PID, nature:r.nature, debut:r.debut, note:r.note};
+      if(r.personne.length) d.personne = r.personne[0];
+      else d.nouvelle = {prenom:r.prenom, nom:r.nom, naissance:r.naissance, sexe:r.sexe};
+      envoyer(d);
+    }});
+}
 
 function editerEvenement(el, v, place){
   const nouveau = !v.id;
@@ -2015,6 +2083,8 @@ function brancherEdition(){
     editeur(b, [{nom:"valeur", type: long ? "textarea" : "texte"}], {place:"apres", libelleOk:"Ajouter",
       enregistrer: r=>envoyer({op:"liste", pid:PID, champ, index:null, valeur:r.valeur})});
   }));
+  const bCj = $("#b-conjoint");
+  if(bCj) bCj.addEventListener("click", ()=>ajouterConjoint(bCj));
   const bEv = $("#b-evenement");
   if(bEv) bEv.addEventListener("click", ()=>editerEvenement(bEv, {}, "apres"));
   $$("[data-retirer-section]").forEach(b=>b.addEventListener("click", ()=>{
@@ -2707,21 +2777,34 @@ def construire_page(pid, donnees, nom_arbre, date_gen, source_nom="", partage=Fa
     for u in mes_unions:
         autre = next((c for c in u["conjoints"] if c != pid), None)
         det = []
+        conjoint = u.get("nature") == "conjoint"
+        if conjoint:
+            det.append("conjoint(e) significatif(ve)"
+                       + (" — depuis " + esc(u["debut"]["texte"]) if u.get("debut") else ""))
         if u.get("mariage"):
             det.append("mariage : " + esc(u["mariage"]["texte"]))
         if u.get("contrat"):
             det.append("contrat : " + esc(u["contrat"]["texte"]))
         for n in (u.get("notes") or []):
             det.append(esc(n))
-        R.append("<dt>Union</dt><dd>" + (lien(autre, personnes) if autre else "—")
+        # Une union se modifie depuis la fiche (C-024) : nature, date,
+        # note ; et se retire si elle n'a pas d'enfants.
+        val = {"union": u.get("id"), "nature": u.get("nature") or "mariage",
+               "debut": ((u.get("debut") if conjoint else u.get("mariage")) or {}).get("texte", ""),
+               "enfants": len(u.get("enfants") or [])}
+        R.append(f'<dt>{"Conjoint(e)" if conjoint else "Union"}</dt>'
+                 f'<dd class="ed" data-ed="union" data-val="{attr_json(val)}"><span class="v">'
+                 + (lien(autre, personnes) if autre else "—")
                  + "".join(f'<small style="display:block;color:var(--muted);font-size:12.6px;'
-                           f'line-height:1.45;margin-top:3px">{d}</small>' for d in det) + "</dd>")
+                           f'line-height:1.45;margin-top:3px">{d}</small>' for d in det) + "</span></dd>")
         enfants = u.get("enfants") or []
         if enfants:
             R.append("<dt>Enfants</dt><dd>"
                      + ", ".join(lien(e, personnes, (personnes.get(e) or {}).get("prenom")) for e in enfants)
                      + "</dd>")
-    ajoute("relations", "Relations", f'<dl class="rel">{"".join(R)}</dl>' if R else "")
+    ajoute("relations", "Relations", f'<dl class="rel">{"".join(R)}</dl>'
+           '<button type="button" class="b-plus-ed" id="b-conjoint">+ Ajouter un(e) conjoint(e)</button>',
+           vide=not R)
 
     # ---- photos et recettes : toujours là, même vides ----
     # Une rubrique vide n'est pas un manque : c'est une invitation.
