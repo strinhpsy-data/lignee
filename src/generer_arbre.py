@@ -147,6 +147,7 @@ header{
 .plier.ferme text{fill:var(--or)}
 .plier:hover rect{stroke:var(--or); stroke-width:2}
 .plier.fratrie rect{stroke-dasharray:3 2}
+.plier.desc rect{stroke-dasharray:1.5 2.5}
 .anneau{fill:none; stroke-width:3.2; transition:stroke-width .14s}
 .puce.fr .anneau{stroke:var(--fr)}
 .j-br{font-weight:600}
@@ -346,6 +347,7 @@ header{
     <button class="btn rond" id="b-moins" title="Dézoomer">&minus;</button>
     <button class="btn rond" id="b-plus" title="Zoomer">+</button>
     <button class="btn" id="b-fratrie" aria-pressed="true" title="Afficher ou masquer les frères et sœurs" hidden>Fratrie</button>
+    <button class="btn" id="b-desc" aria-pressed="false" title="Afficher ou masquer la descendance des frères et sœurs" hidden>Descendances</button>
     <button class="btn" id="b-replier" title="Ne garder que les deux premières générations">Replier</button>
     <button class="btn" id="b-reset" title="Tout revoir">Recadrer</button>
     <button class="btn rond" id="b-theme" title="Clair / sombre">◐</button>
@@ -511,7 +513,7 @@ function recenser(n){ indexNoeuds[n.id]=n; (n.enfants||[]).forEach(recenser); }
 [principal].concat(detaches).filter(Boolean).forEach(recenser);
 
 function basculer(id){
-  const n = indexNoeuds[id];
+  const n = indexNoeuds[id] || DESC_NOEUDS[id];
   if(!n || !(n.enfants||[]).length) return;
   n.ouvert = !n.ouvert;
   rendre(true);
@@ -540,10 +542,23 @@ function basculerFratrie(id){
 function reveler(id){
   if(indexNoeuds[id]) return ouvrirChemin(id);
   const n = Object.values(indexNoeuds).find(x=>(x.fratrie||[]).includes(id));
-  if(!n) return false;
-  ouvrirChemin(n.id);
-  n.fratrieCachee = false;
-  majBoutonFratrie();
+  if(n){
+    ouvrirChemin(n.id);
+    n.fratrieCachee = false;
+    majBoutonFratrie();
+    return true;
+  }
+  /* Dans la descendance d'un frère ou d'une soeur (C-026) : on montre le
+     frère ou la soeur, on ouvre son bloc, puis le chemin jusqu'à la
+     personne à l'intérieur du bloc. */
+  const nc = Object.values(indexNoeuds).find(x=>(x.conjoints||[]).some(c=>c.id===id));
+  if(nc) return ouvrirChemin(nc.id);
+  const d = DESC_DE[id];
+  if(!d || !reveler(d.s)) return false;
+  const b = bloc(d.s); b.ouvert = true;
+  let m = DESC_NOEUDS[d.via]; m = m && m.parent;
+  while(m){ m.ouvert = true; m = m.parent; }
+  majBoutonDesc();
   return true;
 }
 
@@ -563,6 +578,7 @@ function poserParents(n){ (n.enfants||[]).forEach(e=>{ e.parent = n; poserParent
 
 function replierTout(){
   Object.values(indexNoeuds).forEach(n=>{ n.ouvert = n.prof < PROFONDEUR_INITIALE; });
+  Object.values(DESC).forEach(b=>{ b.ouvert = false; }); majBoutonDesc();
   rendre(false);
 }
 /* Le bouton « Fratrie » de la barre : tout montrer ou tout replier d'un
@@ -580,6 +596,235 @@ function basculerToutesFratries(){
   majBoutonFratrie();
   rendreAncre(selection && indexNoeuds[selection] ? selection : principal.id);
 }
+/* ---------------- la descendance des frères et soeurs (C-026) ----------------
+   La fratrie se pose sans sa descendance (C-017) : une rangée de frères et
+   soeurs, pas un deuxième arbre. Mais le Gia phả họ Trịnh est presque tout
+   entier fait de ces descendances-là, et elles restaient dans les données
+   sans jamais paraître. Chaque frère ou soeur qui a des enfants porte
+   maintenant son bouton, sous le médaillon : sa descendance s'ouvre SOUS
+   lui, en arbre descendant, et ses enfants tombent sur la rangée de leur
+   génération — celle des cousins de la lignée. Si la place est prise, le
+   bloc glisse vers l'extérieur, du côté où se trouve le frère ou la soeur,
+   jusqu'à la place libre. La disposition de la lignée n'est jamais touchée :
+   les blocs se posent APRÈS elle, dans le vide qu'elle laisse. */
+const DESC = {}, DESC_NOEUDS = {}, DESC_DE = {}, NB_DESC = {};
+const DESC_PROF = 2;          // un bloc s'ouvre sur deux générations
+(function(){
+  /* Les sources : les frères et soeurs de la lignée, et aussi les
+     conjoint(e)s de ses autres unions (C-024) — leurs enfants sont des
+     demi-frères et demi-soeurs : les branches des deuxième et troisième
+     épouses de Trịnh Văn Quới n'apparaissaient sinon nulle part. */
+  const vus = new Set(), sources = [];
+  Object.values(indexNoeuds).forEach(n=>{
+    (n.fratrie||[]).forEach(s=>sources.push(s));
+    (n.conjoints||[]).forEach(c=>sources.push(c.id));
+  });
+  sources.forEach(s=>{
+    if(vus.has(s)) return; vus.add(s);
+    const compte = new Set();
+    (function marcher(x){
+      const enfantsDe = u => (u.enfants||[]).forEach(e=>{
+        if(!P[e] || indexNoeuds[e] || compte.has(e)) return;
+        compte.add(e); DESC_DE[e] = {s, via:e}; marcher(e);
+      });
+      (unionsDe[x]||[]).forEach(u=>{
+        u.conjoints.forEach(c=>{
+          if(c===x || indexNoeuds[c]) return;
+          if(!DESC_DE[c]) DESC_DE[c] = {s, via:x};
+          /* les enfants que ce conjoint a eus d'une autre union */
+          (unionsDe[c]||[]).forEach(u2=>{ if(!u2.conjoints.includes(x)) enfantsDe(u2); });
+        });
+        enfantsDe(u);
+      });
+    })(s);
+    NB_DESC[s] = compte.size;
+  });
+})();
+const LISTE_DESC = Object.keys(NB_DESC).filter(s=>NB_DESC[s]);
+/* Qui porte un bouton de descendance : un frère ou une soeur, ou le ou la
+   conjoint(e) d'une autre union de la lignée — jamais la personne de la
+   lignée elle-même ni le conjoint d'un frère, dont le bloc est celui du frère. */
+function aDesc(pu){ return !!(pu.fratrie || (pu.union && !pu.deFratrie && !pu.focal)); }
+
+/* Le bloc se construit au premier clic : 2 500 personnes de cousins ne se
+   préparent pas à l'ouverture de la page pour rien. */
+function bloc(s){
+  if(DESC[s]) return DESC[s];
+  const vu = new Set(Object.keys(indexNoeuds)); vu.delete(s);
+  const r = construire(s, vu);
+  /* Les enfants qu'un(e) conjoint(e) a eus d'une autre union : construire()
+     ne les voit pas, n'allant que d'une personne à ses unions à elle. Sans
+     cela, les enfants de Nguyễn Thị Tại, première épouse de Trịnh Khánh
+     Vàng, ou la demi-soeur Phan Thị Đầm n'avaient aucune place à l'écran.
+     Ils se rangent avec la personne, sous une union à part qui part du
+     conjoint (« via »). */
+  (function autres(n){
+    n.conjoints.slice().forEach(c=>{
+      if(indexNoeuds[c.id]) return;   // un conjoint de la lignée a ses propres boutons
+      (unionsDe[c.id]||[]).forEach(u2=>{
+        if(u2.conjoints.includes(n.id) || !(u2.enfants||[]).length) return;
+        const enf = u2.enfants.map(e=>construire(e, vu)).filter(Boolean);
+        if(!enf.length) return;
+        n.groupes.push({union:u2, enfants:enf, via:c.id});
+        n.enfants = n.enfants.concat(enf);
+      });
+    });
+    (n.enfants||[]).forEach(autres);
+  })(r);
+  (function prep(n, prof){
+    n.total = 0; n.prof = prof; n.ouvert = prof < DESC_PROF; n.bloc = s;
+    DESC_NOEUDS[n.id] = n;
+    (n.enfants||[]).forEach(e=>{ n.total += 1 + prep(e, prof+1); });
+    return n.total;
+  })(r, 0);
+  poserParents(r);
+  return DESC[s] = {racine:r, ouvert:false};
+}
+/* Quand le bloc est ouvert, le ou la conjoint(e) du frère ou de la soeur
+   prend place à côté de lui dans la rangée : sans cela, les enfants
+   n'auraient qu'un parent à l'écran. */
+function conjDesc(s){
+  const b = DESC[s];
+  if(!b || !b.ouvert) return [];
+  return b.racine.conjoints.filter(c=>P[c.id] && !indexNoeuds[c.id])
+                           .map(c=>({id:c.id, union:c.union, deFratrie:s}));
+}
+function basculerDesc(s){
+  const b = bloc(s); b.ouvert = !b.ouvert;
+  majBoutonDesc();
+  rendreAncre(s);
+}
+function majBoutonDesc(){
+  const b=document.getElementById("b-desc"); if(!b) return;
+  b.hidden = !LISTE_DESC.length;
+  b.setAttribute("aria-pressed", LISTE_DESC.some(s=>DESC[s]&&DESC[s].ouvert));
+}
+function basculerToutesDesc(){
+  const montrer = !LISTE_DESC.some(s=>DESC[s]&&DESC[s].ouvert);
+  LISTE_DESC.forEach(s=>{ bloc(s).ouvert = montrer; });
+  if(montrer){ AVEC_FRATRIE.forEach(n=>{ n.fratrieCachee = false; }); majBoutonFratrie(); }
+  majBoutonDesc();
+  rendreAncre(selection && indexPuces[selection] ? selection : principal.id);
+}
+function noeudsVisibles(n, acc){ acc.push(n); enf(n).forEach(e=>noeudsVisibles(e, acc)); return acc; }
+
+let BLOCS_PLACES = [];
+function placerBlocs(){
+  BLOCS_PLACES = [];
+  if(!MONTANT || !LISTE_DESC.some(s=>DESC[s]&&DESC[s].ouvert)) return;
+  const V = mode==="portraits";
+  const L = V ? MED_L : FIC_H, GAP = V ? MED_EP : FIC_EP*2;
+  const cle = p => V ? p.y : p.x, pos = p => V ? p.x : p.y;
+  const occ = new Map();
+  const occuper = p => { const k=cle(p); if(!occ.has(k)) occ.set(k, []); occ.get(k).push([pos(p), pos(p)+L]); };
+  const principaux = noeudsVisibles(principal, []);
+  principaux.forEach(n=>n.puces.forEach(occuper));
+  principaux.forEach(n=>{
+    const moi = n.puces.find(p=>p.focal);
+    n.puces.forEach(pu=>{
+      if(!aDesc(pu) || !DESC[pu.id] || !DESC[pu.id].ouvert) return;
+      const kids = enf(DESC[pu.id].racine);
+      if(!kids.length) return;
+      const couple = n.puces.filter(x=>x.id===pu.id || x.deFratrie===pu.id);
+      const centre = couple.length > 1 ? (pos(couple[0]) + pos(couple[1]))/2 + L/2 : pos(pu) + L/2;
+      SENS = 1; SENS_H = -1;
+      let tot = 0;
+      kids.forEach((e,i)=>{ tot += V ? mesurerV(e) : mesurerH(e); if(i) tot += V ? MED_EF : FIC_EF; });
+      let c = centre - tot/2;
+      const niv = V ? pu.y + MED_NIV : pu.x - FIC_COL;
+      kids.forEach((e,i)=>{ if(i) c += V ? MED_EF : FIC_EF; V ? placerV(e, c, niv) : placerH(e, c, niv); c += e.taille; });
+      SENS = SENS0; SENS_H = 1;
+      const membres = [];
+      kids.forEach(e=>noeudsVisibles(e, membres));
+      const pts = [].concat(...membres.map(m=>m.puces));
+      /* Glisser jusqu'à la place libre, d'un côté puis de l'autre, et garder
+         le plus court. Toujours vers l'extérieur, le bloc de Diệp partait
+         au bout de la rangée de Fernande et de ses onze frères et soeurs,
+         à 2 700 px de sa mère (constaté au premier essai). */
+      /* L'enveloppe du bloc, rangée par rangée : on la compare aux places
+         prises, au lieu de comparer chaque médaillon (tout ouvert, 2 268
+         médaillons demandaient sept secondes). Un bloc ne s'entrelace donc
+         jamais avec un autre ; c'est aussi plus lisible. */
+      const env = new Map();
+      pts.forEach(p=>{ const k=cle(p), a=pos(p), b=a+L, e=env.get(k);
+        if(!e) env.set(k,[a,b]); else { e[0]=Math.min(e[0],a); e[1]=Math.max(e[1],b); } });
+      const glisser = dir => {
+        let dec = 0;
+        for(let k=0; k<500; k++){
+          let besoin = 0;
+          env.forEach(([a0,b0],cl)=>{
+            const a = a0+dec, b = b0+dec;
+            (occ.get(cl)||[]).forEach(([o0,o1])=>{
+              if(a < o1+GAP && b > o0-GAP){
+                const s = dir<0 ? (o0-GAP)-b : (o1+GAP)-a;
+                if(Math.abs(s) > Math.abs(besoin)) besoin = s;
+              }
+            });
+          });
+          if(!besoin) break;
+          dec += besoin;
+        }
+        return dec;
+      };
+      const dehors = moi && pos(pu) < pos(moi) ? -1 : 1;
+      const d1 = glisser(dehors), d2 = glisser(-dehors);
+      const dec = Math.abs(d2) < Math.abs(d1) ? d2 : d1;
+      membres.forEach(m=>{
+        m.puces.forEach(p=>{ if(V) p.x += dec; else p.y += dec; });
+        m.pivot += dec; m.debut += dec; m.centre += dec;
+        m.branche = n.branche;
+      });
+      env.forEach(([a0,b0],cl)=>{ if(!occ.has(cl)) occ.set(cl, []); occ.get(cl).push([a0+dec, b0+dec]); });
+      BLOCS_PLACES.push({pu, couple, centre, kids});
+    });
+  });
+}
+function dessinerBlocs(){
+  const V = mode==="portraits";
+  SENS = 1; SENS_H = -1;
+  BLOCS_PLACES.forEach(({pu, couple, centre, kids})=>{
+    if(V){
+      const yDep = pu.y+MED_H+20, yBus = pu.y+MED_NIV-14;
+      const xs = kids.map(e=>e.pivot);
+      couchLiens.appendChild(el("path",{class:"lien",d:`M ${centre} ${yDep} V ${yBus}`}));
+      couchLiens.appendChild(el("path",{class:"lien",d:`M ${Math.min(centre,...xs)} ${yBus} H ${Math.max(centre,...xs)}`}));
+      kids.forEach(e=>{
+        couchLiens.appendChild(el("path",{class:"lien",d:`M ${e.pivot} ${yBus} V ${e.y+4}`}));
+        dessinerV(e, false);
+      });
+    }else{
+      const yDep = couple.length > 1 ? centre : pu.y+FIC_H-8, xBus = pu.x-30;
+      const ys = kids.map(e=>e.pivot);
+      couchLiens.appendChild(el("path",{class:"lien",d:`M ${pu.x} ${yDep} H ${xBus}`}));
+      couchLiens.appendChild(el("path",{class:"lien",d:`M ${xBus} ${Math.min(yDep,...ys)} V ${Math.max(yDep,...ys)}`}));
+      kids.forEach(e=>{
+        couchLiens.appendChild(el("path",{class:"lien",d:`M ${xBus} ${e.pivot} H ${e.x+FIC_L}`}));
+        dessinerH(e, false);
+      });
+    }
+  });
+  SENS = SENS0; SENS_H = 1;
+}
+/* Le bouton de descendance : posé sous le frère ou la soeur (à gauche de
+   la carte en vue Cartes), en pointillé fin pour ne se confondre ni avec
+   celui des ascendants ni avec celui de la fratrie. */
+function boutonDesc(s, cx, cy){
+  const nb = NB_DESC[s];
+  if(!nb) return;
+  const ouvert = !!(DESC[s] && DESC[s].ouvert), court = mode!=="portraits";
+  const texte = ouvert ? (court ? "−" : "− descendance")
+                       : ("+"+nb+(court ? "" : (nb>1 ? " descendants" : " descendant")));
+  const larg = Math.max(22, 11 + texte.length*(court?7.2:5.6));
+  const g = el("g",{class:"plier desc"+(ouvert?"":" ferme"),"data-desc":s,
+                    transform:`translate(${cx-larg/2},${cy})`});
+  const t = el("title",{}); t.textContent = ouvert ? "Masquer la descendance" : "Afficher la descendance";
+  g.appendChild(t);
+  g.appendChild(el("rect",{x:0,y:0,width:larg,height:16,rx:8}));
+  const tx = el("text",{x:larg/2,y:11.5,"text-anchor":"middle"});
+  tx.textContent = texte; g.appendChild(tx);
+  g.addEventListener("click", ev=>{ ev.stopPropagation(); basculerDesc(s); });
+  couchPuces.appendChild(g);
+}
 const ancNode = (function t(n){ if(P[n.id]&&P[n.id].ancetre) return n;
   for(const e of (n.enfants||[])){ const r=t(e); if(r) return r; } return null; })(principal);
 
@@ -588,7 +833,10 @@ const ancNode = (function t(n){ if(P[n.id]&&P[n.id].ancetre) return n;
 const RAYON=34, MED_L=118, MED_H=118, MED_EP=18, MED_EF=22, MED_NIV=168;
 /* +1 : les enfants sous les parents. -1 : les parents au-dessus de l'enfant.
    La disposition est la même ; seul le signe de l'axe change. */
-const SENS = MONTANT ? -1 : 1;
+let SENS = MONTANT ? -1 : 1;
+const SENS0 = SENS;
+/* fiches : +1, les générations vont vers la droite ; -1 dans un bloc de descendance */
+let SENS_H = 1;
 /* fiches : de gauche à droite, cartes */
 const FIC_L=184, FIC_H=62, FIC_EP=8, FIC_EF=16, FIC_COL=282;
 
@@ -610,7 +858,8 @@ if(MONTANT) racines.filter(Boolean).forEach(poserPuces);
 function fra(n){ return n.fratrieCachee ? [] : (n.fratrie||[]); }
 
 function taillePuces(n, pas, ecart){
-  const k = 1 + n.conjoints.length + fra(n).length;
+  const k = 1 + n.conjoints.length + fra(n).length
+          + fra(n).reduce((s,f)=>s+conjDesc(f).length, 0);
   return k*pas + (k-1)*ecart;
 }
 
@@ -626,6 +875,7 @@ function rangee(n){
     for(let i = 0; i < f.length; i++){
       if(i === rang) ordre.push({id:n.id, focal:true});
       ordre.push({id:f[i], fratrie:true});
+      ordre.push(...conjDesc(f[i]));
     }
     if(rang >= f.length) ordre.push({id:n.id, focal:true});
   }else{
@@ -678,7 +928,7 @@ function placerH(n, haut, x){
   if(!enf(n).length){ n.debut = haut + (n.taille-hp)/2; }
   else{
     let cy = haut + (n.taille - n.tailleEnfants)/2;
-    enf(n).forEach((e,i)=>{ if(i) cy += FIC_EF; placerH(e, cy, x+FIC_COL); cy += e.taille; });
+    enf(n).forEach((e,i)=>{ if(i) cy += FIC_EF; placerH(e, cy, x+SENS_H*FIC_COL); cy += e.taille; });
     const a=enf(n)[0], b=enf(n)[enf(n).length-1];
     const c=(a.pivot+b.pivot)/2;
     n.debut = Math.min(Math.max(c-hp/2, haut), haut+n.taille-hp);
@@ -929,7 +1179,7 @@ function dessinerV(n, detache){
       /* Le trait part de la personne, pas du voisin : avec deux conjoint(e)s,
          relier le second au premier les donnait pour un couple (C-024). Le
          premier est voisin, trait droit ; les suivants passent au-dessus. */
-      const moi=n.puces.find(x=>x.focal), prec=n.puces[i-1];
+      const moi=pu.deFratrie ? n.puces.find(x=>x.id===pu.deFratrie) : n.puces.find(x=>x.focal), prec=n.puces[i-1];
       const cls="alliance"+(d?" directe":"")+(u.nature==="conjoint"?" conjoint":"");
       let x1=prec.x+MED_L/2+RAYON, x2=pu.x+MED_L/2-RAYON; let yl=ym-7;
       if(moi && prec!==moi && prec.union){
@@ -945,11 +1195,12 @@ function dessinerV(n, detache){
   });
   if(n.total) bouton(n, n.pivot, SENS>0 ? n.y+MED_H+10 : n.y-26);
   if(SENS<0) boutonFratrie(n, n.pivot, n.y+MED_H+2);
+  if(SENS<0) n.puces.forEach(pu=>{ if(aDesc(pu)) boutonDesc(pu.id, pu.x+MED_L/2, pu.y+MED_H+2); });
   grp(n).forEach((gr,gi)=>{
     if(!gr.enfants.length) return;
-    const idx=n.puces.findIndex(pu=>pu.union===gr.union);
+    const idx=gr.via ? n.puces.findIndex(pu=>pu.id===gr.via) : n.puces.findIndex(pu=>pu.union===gr.union);
     const xa=n.pivot, xb=idx>0?n.puces[idx].x+MED_L/2:xa;
-    const xU=(xa+xb)/2;
+    const xU=gr.via && idx>0 ? xb : (xa+xb)/2;
     const yDep = SENS>0 ? n.y+MED_H+4  : n.y-4;
     const yBus = SENS>0 ? n.y+MED_H+26+gi*10 : n.y-26-gi*10;
     const d=!!gr.union.lignee, cls="lien"+(d?" directe":"");
@@ -971,7 +1222,7 @@ function dessinerH(n, detache){
     if(i>0 && pu.union){
       const u=pu.union, d=!!u.lignee, xm=n.x+24;
       const y1=n.puces[i-1].y+FIC_H, y2=pu.y;
-      const moi=n.puces.find(x=>x.focal), prec=n.puces[i-1];
+      const moi=pu.deFratrie ? n.puces.find(x=>x.id===pu.deFratrie) : n.puces.find(x=>x.focal), prec=n.puces[i-1];
       const cls="alliance"+(d?" directe":"")+(u.nature==="conjoint"?" conjoint":"");
       if(moi && prec!==moi && prec.union){
         const k=n.puces.indexOf(pu)-n.puces.indexOf(moi), xg=n.x-6-(k-2)*5;
@@ -983,20 +1234,21 @@ function dessinerH(n, detache){
         t.textContent=lab[1]; couchLiens.appendChild(t); }
     }
   });
-  if(n.total) bouton(n, n.x+FIC_L+13, n.debut+FIC_H/2);
-  boutonFratrie(n, n.x-27, n.pivot+6);
+  if(n.total) bouton(n, SENS_H>0 ? n.x+FIC_L+13 : n.x-13, n.debut+FIC_H/2);
+  if(SENS_H>0) boutonFratrie(n, n.x-27, n.pivot+6);
+  if(MONTANT && SENS_H>0) n.puces.forEach(pu=>{ if(aDesc(pu)) boutonDesc(pu.id, n.x-27, pu.y+FIC_H/2-8); });
   grp(n).forEach((gr,gi)=>{
     if(!gr.enfants.length) return;
-    const idx=n.puces.findIndex(pu=>pu.union===gr.union);
+    const idx=gr.via ? n.puces.findIndex(pu=>pu.id===gr.via) : n.puces.findIndex(pu=>pu.union===gr.union);
     const ya=n.debut+FIC_H/2, yb=idx>0?n.puces[idx].y+FIC_H/2:ya;
-    const yU=(ya+yb)/2, xDep=n.x+FIC_L, xBus=n.x+FIC_COL-54+gi*11;
+    const yU=gr.via && idx>0 ? yb : (ya+yb)/2, xDep=SENS_H>0?n.x+FIC_L:n.x, xBus=SENS_H>0?n.x+FIC_COL-54+gi*11:n.x-54-gi*11;
     const d=!!gr.union.lignee, cls="lien"+(d?" directe":"");
     couchLiens.appendChild(el("path",{class:cls,d:`M ${xDep} ${yU} H ${xBus}`}));
     const ys=gr.enfants.map(e=>e.pivot);
     couchLiens.appendChild(el("path",{class:cls,d:`M ${xBus} ${Math.min(yU,...ys)} V ${Math.max(yU,...ys)}`}));
     gr.enfants.forEach(e=>{
       const de=!!(P[e.id]&&P[e.id].lignee)&&d;
-      couchLiens.appendChild(el("path",{class:"lien"+(de?" directe":""),d:`M ${xBus} ${e.pivot} H ${e.x}`}));
+      couchLiens.appendChild(el("path",{class:"lien"+(de?" directe":""),d:`M ${xBus} ${e.pivot} H ${SENS_H>0?e.x:e.x+FIC_L}`}));
       dessinerH(e, detache);
     });
   });
@@ -1013,8 +1265,10 @@ function rendre(garderVue){
   couchLiens=el("g",{}); couchPuces=el("g",{});
   monde.appendChild(couchLiens); monde.appendChild(couchPuces);
   disposer();
+  placerBlocs();
   if(mode==="portraits"){
     dessinerV(principal,false); detaches.forEach(d=>dessinerV(d,true));
+    dessinerBlocs();
     if(ancNode&&detaches.length){
       const d0=detaches[0], x=ancNode.pivot;
       couchLiens.insertBefore(el("path",{class:"lien","stroke-dasharray":"7 6",
@@ -1025,6 +1279,7 @@ function rendre(garderVue){
     }
   }else{
     dessinerH(principal,false); detaches.forEach(d=>dessinerH(d,true));
+    dessinerBlocs();
     if(ancNode&&detaches.length){
       const d0=detaches[0], y=ancNode.pivot;
       couchLiens.insertBefore(el("path",{class:"lien","stroke-dasharray":"7 6",
@@ -1112,6 +1367,8 @@ document.getElementById("b-moins").onclick=()=>zoomer(.8);
 document.getElementById("b-replier").onclick=replierTout;
 document.getElementById("b-fratrie").onclick=basculerToutesFratries;
 majBoutonFratrie();
+document.getElementById("b-desc").onclick=basculerToutesDesc;
+majBoutonDesc();
 document.getElementById("b-reset").onclick=recadrer;
 toile.addEventListener("click",()=>{ if(!aBouge) fermerFiche(); aBouge=false; });
 

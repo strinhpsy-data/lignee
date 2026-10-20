@@ -30,3 +30,4 @@ il doit suffire à savoir où regarder.
 | `C-023` | 2026-10-19 | La fratrie s'affiche et se masque comme les ascendants | aucun — `tests/` inchangé |
 | `C-024` | 2026-10-19 | Conjoint(e) significatif(ve) ; deux serveurs sur le même port sous Windows | aucun — `tests/` inchangé |
 | `C-025` | 2026-10-19 | Lignée Trịnh de la génération I à X : +106 personnes, +38 unions, 11 points ; « p. 79 » était la p. 77 | aucun — `tests/` inchangé |
+| `C-026` | 2026-10-20 | Tout le Gia phả họ Trịnh (+2 063 personnes) ; la descendance des frères et sœurs s'affiche et se masque | aucun — `tests/` inchangé |
