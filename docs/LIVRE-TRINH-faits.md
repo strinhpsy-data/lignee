@@ -4,9 +4,9 @@
 > Compilé par **Huỳnh Công Chánh**, 1993-2004.
 > Comité de représentation du clan Trịnh, Hô Chi Minh-Ville. 106 pages.
 >
-> Lecture et traduction du texte océrisé — 22 et 23 octobre 2026.
-> Les noms et les dates sont dans l'arbre (2 276 personnes, dont 2 305
-> citations de ce livre). Ce document retient ce qu'un lecteur non
+> Lecture et traduction du texte océrisé — 22, 23 et 24 octobre 2026.
+> Les noms et les dates sont dans l'arbre (2 359 personnes). **Le livre est
+> désormais relevé en entier, de la page 5 à la page 106.** Ce document retient ce qu'un lecteur non
 > vietnamophone ne pouvait pas voir : le récit, les titres, les métiers, les
 > usages, et les endroits où le livre parle au lieu d'énumérer.
 
@@ -396,50 +396,94 @@ Le point 4 de la liste a été réalisé par un descendant resté au village.
 
 ---
 
-## 11 · Ce qu'il faut encore vérifier
+## 11 · Les quatre pages retrouvées
+
+Le 23 octobre, les **pages 51, 52, 83 et 84** — les seules qui manquaient
+aux numérisations — ont été repassées au scanner et versées. Le livre est
+complet. Ce qu'elles contenaient :
+
+**La branche qui restait vide.** Page 52 : **« Bà Năm Trịnh Thị Cao »**, et
+en dessous, deux mots — ***« con duy nhất »***, enfant unique. **Trịnh Văn
+Chinh (1915-1989)**, giỗ le 29 du 8ᵉ mois lunaire, et sa femme Phan Thị Lựu,
+à Tây Ninh. Leurs six enfants sont aujourd'hui en Australie, aux
+États-Unis, à Sông Bé. Deux sont morts en bas âge. Une branche entière
+tenait à ce fil unique, et c'est la page manquante qui le portait.
+
+**Un enfant de treize ans, honoré comme un vieillard.** Page 51 :
+
+> **Trương Thành Phương (1943-1956) — *« Hưởng thọ 13 tuổi »*.**
+
+*Hưởng thọ* — « a joui d'une longue vie » — est la formule qu'on réserve aux
+morts âgés. Le livre l'emploie pour un garçon de treize ans.
+
+**Louis, mort en combattant la France.** Page 84, les onze enfants de
+**Trịnh Thị Giao** et **Phạm Văn Một** portent pour les deux aînés des
+prénoms de baptême français :
+
+> **Cậu Hai : LOUIS Phạm Văn Thìn — *mort dans la résistance*, 1948.**
+> Cậu Ba : FELIX Phạm Văn Lích.
+
+Baptisé Louis, tombé contre les Français, trois ans après Robert Trịnh Công
+Bình, seize ans.
+
+**Trois gendres français, et des petits-enfants aux deux noms.** Page 83, la
+famille de **Trịnh Văn Thảo** vit au 30 avenue Jules-Isaac à
+**Aix-en-Provence**. Ses filles ont épousé **Philippe Duperrin** et
+**Pierre Bouvier**. Et les enfants Bouvier s'appellent :
+
+> **Hải Đăng Bouvier · Minh Đạo Bouvier · Louis Bouvier, dit Đức Long.**
+
+Le prénom vietnamien sur le nom français — l'exact miroir d'Antoine Trịnh
+Văn Luông, soixante ans plus tôt.
+
+**Le correspondant du livre est dans le livre.** Page 83, section I :
+*« Descendants de Cậu Mười Hai **Trịnh Văn Hiền** et Mợ Ngô Kim Xuân — 26
+Trần Quang Khải, Tân Định, district 1 »*. C'est l'adresse imprimée à la
+dernière page, celle à qui écrire pour obtenir ou corriger la généalogie. Le
+compilateur a inscrit son propre correspondant dans les tables.
+
+**Et encore des adresses** : Toronto (259 Symington Ave), Vitry-sur-Seine,
+Santa Clara, San Jose. Avec **Trương Thị Mỹ Nga (1948), professeure de
+sciences à Cần Thơ, partie en France, sans enfant.**
+
+Ces quatre pages ont ajouté **83 personnes et 18 unions** à l'arbre.
+
+---
+
+## 12 · Ce qu'il reste à vérifier
 
 ### Correction — ce que j'ai dit de travers le 22 octobre
 
-J'ai écrit que **les pages 53, 54, 75 et 86 manquaient**, et que la page 75
-était la plus fâcheuse parce qu'elle devait rattacher Trịnh Văn Tồn à ses
-parents. **C'était faux.** Ces quatre pages existent, sont numérisées, lues
-et versées : 33 personnes de l'arbre citent la page 75, dont Trịnh Văn Tồn
-lui-même.
+J'ai écrit que les pages **53, 54, 75 et 86** manquaient, et que la 75 était
+la plus fâcheuse parce qu'elle devait rattacher Trịnh Văn Tồn à ses parents.
+**C'était faux.** Ces quatre pages existaient, étaient lues et versées : 33
+personnes de l'arbre citent la page 75, dont Trịnh Văn Tồn lui-même.
 
 Mon erreur venait de `Scans OCR/_inventaire.json`, qui reconstitue les
-numéros de page par un calcul de décalage. Le scanner, lui, a retourné
+numéros de page par un calcul de décalage. Le numériseur, lui, a retourné
 plusieurs feuilles et en a inversé d'autres — un lot range ses pages dans
 l'ordre 76, 75, 78, 77, 80, 79. Le calcul a donc glissé, et j'ai pris ses
 numéros pour argent comptant au lieu d'aller lire **le folio imprimé sur
 l'image**. En le lisant, le chiffre est net.
 
-Le projet le savait déjà : la relecture page par page du 20 octobre
-(`C-026`) a corrigé la numérotation, et les points `tp6`, `tq38`, `tq55` et
-`tq-pages` consignent le tout.
+Les vraies absentes étaient 51, 52, 83 et 84 — celles que Sébastien a
+renumérisées. **Conséquence pratique : les noms de fichiers du dossier
+`Scans OCR/gia-pha-ho-trinh/` suivent encore l'ancienne numérotation.** Les
+citations de l'arbre, elles, portent les bons numéros. En cas de doute,
+c'est l'arbre qui fait foi, pas le nom du fichier.
 
-### Les vraies lacunes
-
-**Les quatre pages absentes des scans sont 51, 52, 83 et 84.** Le livre se
-termine page 106, sur le mot **« HẾT »** — fin.
-
-| Pages | Ce qui s'y trouvait, d'après les tables voisines |
-|---|---|
-| **51-52** | descendance de Trương Thị Anh, Trương Văn Bình, Trương Văn Mẩn |
-| **83-84** | descendance de Trịnh Văn Thảo, Trịnh Văn Cảnh, Trịnh Văn Hiền |
-
-Conséquence visible dans l'arbre : **Trịnh Thị Cao, « Bà Năm »**, reste sans
-descendance connue. Quatre feuilles à repasser au numériseur suffiraient.
-
-### Et les points laissés ouverts
+### Points encore ouverts
 
 1. **Le nom de la IIIᵉ génération.** Les deux exemplaires de la même page
-   dans le scan donnent **NHẤNG** et **NHẬN** ; l'arbre porte *Nhãn*. À
-   trancher sur l'original.
+   donnent **NHẤNG** et **NHẬN** ; l'arbre porte *Nhãn*. À trancher sur
+   l'original.
 2. **Trịnh Văn Vận : « né 1845, mort 1817 ».** Les deux images portent bien
    1817 : c'est le livre qui se trompe, pas l'OCR (point `tp3`).
 3. **La 9ᵉ année de Tự Đức** n'est pas 1861 mais 1856 (point `tp4`).
 4. **« Mort le 16/04 lunaire, année Giáp Tuất 1994 »**, page 76, placé sous
    le couple *Trịnh Văn Tồn & Trương Thị Khả* sans dire lequel des deux.
+5. **Trương Mỹ Dung**, page 52 : la mise en page ne dit pas si elle est
+   fille ou petite-fille de Trương Văn Mẩn. Non rattachée.
 
 ---
 
