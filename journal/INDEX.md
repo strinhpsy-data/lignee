@@ -33,3 +33,4 @@ il doit suffire à savoir où regarder.
 | `C-026` | 2026-10-20 | Tout le Gia phả họ Trịnh (+2 063 personnes) ; la descendance des frères et sœurs s'affiche et se masque | aucun — `tests/` inchangé |
 | `C-027` | 2026-10-23 | Sources déjà océrisées ; lacune corrigée (51-52, 83-84) ; 57 métiers versés | aucun — `tests/` inchangé |
 | `C-028` | 2026-10-23 | Pages 51, 52, 83 et 84 renumérisées et versées : +83 personnes, le livre est complet | aucun — `tests/` inchangé |
+| `C-029` | 2026-10-29 | La chaîne d'océrisation ne trouvait plus aucun scan après leur classement | aucun — `tests/` inchangé |

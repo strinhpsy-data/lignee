@@ -62,6 +62,24 @@ def outil_present(nom):
 # Phase 1 — rendu et OCR
 # =====================================================================
 
+def trouver_pdf(nom):
+    """Le fichier declare, cherche dans Scans/ PUIS dans ses sous-dossiers.
+
+    Les numerisations ont ete regroupees dans « Scans/Nouvelles sources a
+    oceriser/ » : la recherche a plat ne trouvait plus AUCUN des 39 fichiers
+    declares et annoncait trente-neuf fois ABSENT. Un classement fait a la
+    main ne doit pas casser la chaine.
+    """
+    direct = SCANS / nom
+    if direct.exists():
+        return direct
+    for sous in sorted(SCANS.iterdir()):
+        if sous.is_dir() and not sous.name.startswith("_"):
+            candidat = sous / nom
+            if candidat.exists():
+                return candidat
+    return None
+
 def nb_pages(pdf):
     s = subprocess.run(["pdfinfo", str(pdf)], capture_output=True, text=True)
     for ligne in s.stdout.splitlines():
@@ -131,8 +149,8 @@ def phase_ocr(documents, filtre, secondes):
         print(f"\n=== {doc['id']} — {doc['titre']} — langue {doc['langue']} ===")
 
         for nom in doc["fichiers"]:
-            pdf = SCANS / nom
-            if not pdf.exists():
+            pdf = trouver_pdf(nom)
+            if pdf is None:
                 print(f"  ABSENT  {nom}")
                 continue
             tige = pdf.stem
