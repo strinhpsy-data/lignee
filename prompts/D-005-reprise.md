@@ -33,7 +33,7 @@ passation ; le premier est : ne jamais inventer une donnée généalogique.
 ```
 genealogie_samuel.json   2 359 personnes · 698 unions · 101 points à vérifier
 tests/contrat.py         tout au vert
-git                      30 commits
+git                      31 commits, HEAD = [C-030]
 ```
 
 **Les deux sources papier sont relevées en entier.**
