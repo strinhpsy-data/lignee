@@ -119,6 +119,18 @@ Súc** en était le village principal : en janvier 1967, lors de l'opération
 **Cedar Falls**, sa population entière fut évacuée et le village rasé au
 bulldozer. Le livre, lui, n'en dit que ce que vous venez de lire.
 
+Il existe de cet effacement **un récit de témoin direct** : Jonathan Schell,
+*« The Village of Ben Suc »*, **The New Yorker, 15 juillet 1967**. Schell a
+suivi l'opération heure par heure. Il note que Bến Súc était **un village
+riche**, que la population y était gonflée ce mois-là par les parents venus
+pour **une récolte exceptionnellement abondante**, que chaque maison avait
+son abri antibombe, que les hommes de quinze à quarante-cinq ans furent
+séparés des familles et les habitants emmenés à **Phú Lợi**. Puis le village
+fut brûlé, bulldozé et rebombardé sur ses ruines — « comme si, ayant décidé
+de le détruire, nous voulions désormais annihiler toute indication possible
+que le village de Bến Súc eût jamais existé ».
+Voir `docs/TRINH-RECHERCHE-EXTERNE.md`.
+
 Les traces individuelles sont dans les tableaux, sèches, sans commentaire :
 
 - **au moins six « liệt sĩ »** — *martyrs de guerre*, titre officiel

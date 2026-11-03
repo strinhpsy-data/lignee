@@ -35,3 +35,4 @@ il doit suffire à savoir où regarder.
 | `C-028` | 2026-10-23 | Pages 51, 52, 83 et 84 renumérisées et versées : +83 personnes, le livre est complet | aucun — `tests/` inchangé |
 | `C-029` | 2026-10-29 | La chaîne d'océrisation ne trouvait plus aucun scan après leur classement | aucun — `tests/` inchangé |
 | `C-030` | 2026-11-01 | Première incursion hors des deux livres : Fichier Origine, pistes pour jp2 et jp4, points x1 à x5 | aucun — `tests/` inchangé |
+| `C-031` | 2026-11-03 | Branche Trịnh dans les sources externes : rien sur les personnes, Schell 1967 trouvé, adresses périmées (`x6`) | aucun — `tests/` inchangé |
