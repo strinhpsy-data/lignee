@@ -183,3 +183,62 @@ Par ordre de rendement :
    minutes si la piste existe ou non.
 4. **Écrire au comité du clan Trịnh.** C'est long, mais c'est la seule
    source qui peut encore répondre.
+
+---
+
+## 7 · Sources repérées le 8 novembre 2026
+
+### La plus utile, et elle est gratuite
+
+**Archives départementales de la Charente-Maritime** — registres paroissiaux
+numérisés, **quatre millions de pages**, en accès libre :
+
+> `archinoe.net/v2/ad17/registre.html`
+> (lien officiel repris par FranceArchives, portail de l'État)
+
+**Toutes les paroisses françaises de l'arbre y sont** : Écoyeux
+(St-Vivien), Aytré (St-Étienne), La Rochelle (St-Barthélemy, St-Sauveur),
+Brizambourg, Matha, l'Houmeau.
+
+C'est **la source qui ferme `x1` et `x2`** :
+
+| Point | Acte à trouver | Paroisse |
+|---|---|---|
+| `x1` | Guillaume Jean, naissance 07 et baptême 25-01-1654 | Écoyeux (St-Vivien) |
+| `x2` | Vivien Jean, inhumation du 04-04-1664 | St-Vivien |
+| — | Pierre Jean, baptême du 19-02-1645 | La Rochelle (St-Barthélemy) |
+| — | Pierre Jean × Françoise Favreau, mariage du 08-07-1668 | La Rochelle (St-Sauveur) |
+| — | Suzanne Hérault, inhumation du 03-04-1684 | Aytré (St-Étienne) |
+
+Cinq actes, une seule base, gratuite. **Rien d'autre dans ce projet n'offre
+un rapport pareil entre l'effort et la preuve.**
+
+### Pour le côté canadien
+
+- **Bibliothèque et Archives Canada** — recensements de 1825 à 1931,
+  gratuits et indexés. Couvrent directement **Jean dit Johnny Jean
+  (1874-1957)**, **Fortunat Jean (1907-1990)** et **Annette Rioux
+  (1906-1997)** : profession, lieu, composition du ménage, année après
+  année. Rien de tout cela n'est dans le livre de Julienne Jean.
+  *(Le recensement de 1931 a été ouvert en 2023.)*
+- **cimetieresduquebec.ca** — photographies de pierres tombales classées par
+  région, dont le Bas-Saint-Laurent et Rimouski. **C'est la piste la plus
+  sérieuse pour obtenir l'image d'un ancêtre nommé.** Le site n'a pas pu
+  être ouvert depuis cet atelier ; il s'ouvre dans un navigateur.
+- **Société de généalogie de Québec**, **Société généalogique
+  canadienne-française** (Montréal), et la société du Bas-Saint-Laurent —
+  elles détiennent des relevés de paroisse inédits, jamais mis en ligne.
+  Pour St-Mathieu-de-Rioux et St-Simon, c'est là qu'il faut écrire.
+- **BAnQ Rimouski** — le centre régional conserve les minutiers de notaires
+  du Bas-Saint-Laurent, donc les contrats de mariage et les successions de
+  Narcisse, Johnny et Fortunat.
+- **Geneanet** — surtout fort sur le versant français (Aunis, Saintonge).
+
+### Ce qu'il ne faut pas attendre d'eux
+
+Aucune de ces bases n'a quoi que ce soit sur la lignée Trịnh. Elles sont
+québécoises et françaises. Pour le Vietnam, voir
+`docs/TRINH-RECHERCHE-EXTERNE.md` : la réponse y est que les sources
+institutionnelles sont minces et que **la famille reste la seule vraie
+piste**.
+
